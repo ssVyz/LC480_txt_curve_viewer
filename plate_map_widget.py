@@ -9,6 +9,8 @@ class PlateMapWidget(QWidget):
     """Custom-painted 96-well plate map with interactive selection."""
 
     selectionChanged = Signal(set)
+    configureColorRequested = Signal(set)   # wells to assign colour
+    clearColorRequested = Signal(set)       # wells to clear colour from
 
     ROWS = 8
     COLS = 12
@@ -22,6 +24,7 @@ class PlateMapWidget(QWidget):
         self._wells_with_data: set[str] = set()
         self._selected_wells: set[str] = set()
         self._sample_names: dict[str, str] = {}
+        self._sample_colors: dict[str, QColor] = {}
         self._hovered_well: str | None = None
 
         # Drag / rubber-band state
@@ -39,13 +42,11 @@ class PlateMapWidget(QWidget):
     # -- Public API ----------------------------------------------------------
 
     def set_data(self, wells: list[str], sample_names: dict[str, str]):
-        """Set which wells contain data and their sample names."""
         self._wells_with_data = set(wells)
         self._sample_names = dict(sample_names)
         self.update()
 
     def set_selection(self, wells: set[str]):
-        """Set the current selection (called externally for sync)."""
         if wells != self._selected_wells:
             self._selected_wells = set(wells)
             self.update()
@@ -53,10 +54,13 @@ class PlateMapWidget(QWidget):
     def get_selection(self) -> set[str]:
         return set(self._selected_wells)
 
+    def set_sample_colors(self, colors: dict[str, QColor]):
+        self._sample_colors = dict(colors)
+        self.update()
+
     # -- Geometry helpers ----------------------------------------------------
 
     def _cell_geometry(self) -> tuple[float, float, float]:
-        """Return (cell_size, offset_x, offset_y) for the grid layout."""
         avail_w = self.width() - self.LABEL_MARGIN - self.PADDING * 2
         avail_h = self.height() - self.LABEL_MARGIN - self.PADDING * 2
         cell_w = avail_w / self.COLS
@@ -83,7 +87,6 @@ class PlateMapWidget(QWidget):
         return f"{chr(ord('A') + row)}{col + 1}"
 
     def _well_at_pos(self, pos: QPointF) -> tuple[int, int] | None:
-        """Return (row, col) if pos is inside a well circle, else None."""
         cell_size, ox, oy = self._cell_geometry()
         if cell_size <= 0:
             return None
@@ -130,7 +133,6 @@ class PlateMapWidget(QWidget):
             painter.end()
             return
 
-        # Font scaled to cell size
         font = QFont()
         font.setPointSize(max(7, int(cell_size * 0.3)))
         painter.setFont(font)
@@ -156,11 +158,23 @@ class PlateMapWidget(QWidget):
                 has_data = well in self._wells_with_data
                 is_sel = well in self._selected_wells
                 is_hover = well == self._hovered_well
+                sc = self._sample_colors.get(well)
 
+                # Determine fill and border
                 if not has_data:
                     fill = QColor(220, 220, 220)
                     border = QColor(180, 180, 180)
                     bw = 1.0
+                elif sc is not None:
+                    # Sample-coloured well
+                    if is_sel:
+                        fill = QColor(sc.red(), sc.green(), sc.blue(),
+                                      max(sc.alpha(), 160))
+                        border = QColor(sc.red(), sc.green(), sc.blue()).darker(130)
+                    else:
+                        fill = QColor(255, 255, 255)
+                        border = QColor(sc.red(), sc.green(), sc.blue())
+                    bw = 2.0
                 elif is_sel:
                     fill = QColor(0, 0, 0)
                     border = QColor(0, 0, 0)
@@ -171,8 +185,8 @@ class PlateMapWidget(QWidget):
                     bw = 1.0
 
                 if is_hover and has_data:
-                    border = QColor(80, 80, 80)
-                    bw = 2.5
+                    border = border.lighter(140) if sc else QColor(80, 80, 80)
+                    bw = max(bw, 2.5)
 
                 painter.setPen(QPen(border, bw))
                 painter.setBrush(fill)
@@ -199,7 +213,6 @@ class PlateMapWidget(QWidget):
     def mouseMoveEvent(self, event):
         pos = event.position()
 
-        # Hover
         rc = self._well_at_pos(pos)
         new_hover = self._rc_to_well(*rc) if rc else None
         if new_hover != self._hovered_well:
@@ -216,7 +229,6 @@ class PlateMapWidget(QWidget):
                 QToolTip.hideText()
             self.update()
 
-        # Rubber-band drag
         if event.buttons() & Qt.MouseButton.LeftButton and self._drag_start:
             if not self._drag_active:
                 dx = pos.x() - self._drag_start.x()
@@ -235,7 +247,6 @@ class PlateMapWidget(QWidget):
                             cx, cy = self._well_center(r, c)
                             if band.contains(QPointF(cx, cy)):
                                 drag_wells.add(w)
-
                 if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
                     self._selected_wells = self._pre_drag_selection | drag_wells
                 else:
@@ -247,12 +258,10 @@ class PlateMapWidget(QWidget):
             if not self._drag_active:
                 pos = event.position()
 
-                # Row label click
                 row = self._row_label_at_pos(pos)
                 if row is not None:
                     row_wells = {
-                        self._rc_to_well(row, c)
-                        for c in range(self.COLS)
+                        self._rc_to_well(row, c) for c in range(self.COLS)
                     } & self._wells_with_data
                     if row_wells and row_wells <= self._selected_wells:
                         self._selected_wells -= row_wells
@@ -263,12 +272,10 @@ class PlateMapWidget(QWidget):
                     self._drag_start = None
                     return
 
-                # Column label click
                 col = self._col_label_at_pos(pos)
                 if col is not None:
                     col_wells = {
-                        self._rc_to_well(r, col)
-                        for r in range(self.ROWS)
+                        self._rc_to_well(r, col) for r in range(self.ROWS)
                     } & self._wells_with_data
                     if col_wells and col_wells <= self._selected_wells:
                         self._selected_wells -= col_wells
@@ -279,7 +286,6 @@ class PlateMapWidget(QWidget):
                     self._drag_start = None
                     return
 
-                # Well click (toggle)
                 rc = self._well_at_pos(pos)
                 if rc:
                     well = self._rc_to_well(*rc)
@@ -291,7 +297,6 @@ class PlateMapWidget(QWidget):
                         self.selectionChanged.emit(set(self._selected_wells))
                         self.update()
             else:
-                # Rubber-band completed
                 self.selectionChanged.emit(set(self._selected_wells))
 
             self._drag_start = None
@@ -326,18 +331,34 @@ class PlateMapWidget(QWidget):
 
     def _show_context_menu(self, pos):
         menu = QMenu(self)
+
         act_all = menu.addAction("Select All")
         act_none = menu.addAction("Deselect All")
         act_inv = menu.addAction("Invert Selection")
 
+        # Colour actions – only when there is a selection
+        act_color = None
+        act_clear = None
+        if self._selected_wells:
+            menu.addSeparator()
+            act_color = menu.addAction("Configure Color...")
+            act_clear = menu.addAction("Clear Sample Color")
+
         action = menu.exec(self.mapToGlobal(pos))
-        if action == act_all:
+        if action is None:
+            return
+
+        if action is act_all:
             self._selected_wells = set(self._wells_with_data)
-        elif action == act_none:
+        elif action is act_none:
             self._selected_wells = set()
-        elif action == act_inv:
+        elif action is act_inv:
             self._selected_wells = self._wells_with_data - self._selected_wells
-        else:
+        elif action is act_color:
+            self.configureColorRequested.emit(set(self._selected_wells))
+            return
+        elif action is act_clear:
+            self.clearColorRequested.emit(set(self._selected_wells))
             return
 
         self.selectionChanged.emit(set(self._selected_wells))
