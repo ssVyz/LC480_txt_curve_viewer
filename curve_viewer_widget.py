@@ -282,24 +282,14 @@ class CurveViewerWidget(QWidget):
                 plot.plot(self._data.cycles, y, pen=self._pen_for(well, ch_idx))
 
     def _draw_multi(self, channels: list[str], wells: list[str]):
-        plots: list[pg.PlotItem] = []
-        n = len(channels)
-        for i, channel in enumerate(channels):
-            is_last = (i == n - 1)
-            plot = self.graphics_layout.addPlot(
-                row=i, col=0,
-                title=channel,
-                labels={'left': 'RFU',
-                        'bottom': 'Cycle' if is_last else ''},
-            )
-            if self._log_y:
-                plot.setLogMode(y=True)
-            if plots:
-                plot.setXLink(plots[0])
-            if not is_last:
-                plot.hideAxis('bottom')
-            plots.append(plot)
-
+        title = ", ".join(channels)
+        plot = self.graphics_layout.addPlot(
+            title=title,
+            labels={'left': 'Fluorescence (RFU)', 'bottom': 'Cycle'},
+        )
+        if self._log_y:
+            plot.setLogMode(y=True)
+        for channel in channels:
             ch_idx = (self._data.channels.index(channel)
                       if channel in self._data.channels else 0)
             for well in wells:
