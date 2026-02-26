@@ -12,6 +12,7 @@ from plate_map_widget import PlateMapWidget
 from sample_table_widget import SampleTableWidget
 from curve_viewer_widget import CurveViewerWidget
 from color_settings import ColorSettings, ColorSettingsDialog, SampleColorDialog
+from baseline import BaselineSettings, BaselineResults, compute_baseline, BaselineSettingsDialog
 
 
 class MainWindow(QMainWindow):
@@ -23,6 +24,8 @@ class MainWindow(QMainWindow):
         self._data: LC480Data | None = None
         self._syncing = False
         self._color_settings = ColorSettings()
+        self._baseline_settings = BaselineSettings()
+        self._baseline_results: BaselineResults | None = None
 
         self._setup_ui()
         self._setup_menu()
@@ -71,12 +74,17 @@ class MainWindow(QMainWindow):
         settings_menu = self.menuBar().addMenu("&Settings")
         colors_act = settings_menu.addAction("&Colors...")
         colors_act.triggered.connect(self._open_color_settings)
+        baseline_act = settings_menu.addAction("&Baseline...")
+        baseline_act.triggered.connect(self._open_baseline_settings)
 
     def _connect_signals(self):
         self.plate_map.selectionChanged.connect(self._on_plate_selection)
         self.plate_map.configureColorRequested.connect(self._on_configure_color)
         self.plate_map.clearColorRequested.connect(self._on_clear_color)
         self.sample_table.selectionChanged.connect(self._on_table_selection)
+        self.curve_viewer.channel_selector.checkedItemsChanged.connect(
+            lambda _: self._update_table_ct_call()
+        )
 
     # -- File import ---------------------------------------------------------
 
@@ -110,6 +118,7 @@ class MainWindow(QMainWindow):
         self._syncing = False
 
         self._push_colors()
+        self._recompute_baseline()
         self._update_status()
 
     # -- Selection sync ------------------------------------------------------
@@ -164,6 +173,47 @@ class MainWindow(QMainWindow):
                 changed = True
         if changed:
             self._push_colors()
+
+    # -- Baseline management -------------------------------------------------
+
+    def _open_baseline_settings(self):
+        num_cycles = self._data.num_cycles if self._data else 45
+        dlg = BaselineSettingsDialog(
+            self._baseline_settings, num_cycles=num_cycles, parent=self
+        )
+        if dlg.exec() == dlg.DialogCode.Accepted:
+            dlg.apply_to(self._baseline_settings)
+            self._recompute_baseline()
+
+    def _recompute_baseline(self):
+        """Recompute baseline results and push to all widgets."""
+        if not self._data:
+            return
+        self._baseline_results = compute_baseline(
+            self._data, self._baseline_settings
+        )
+        self.curve_viewer.set_baseline_results(self._baseline_results)
+        self._update_table_ct_call()
+
+    def _update_table_ct_call(self):
+        """Update sample table Ct/Call columns for the first checked channel."""
+        if not self._baseline_results or not self._data:
+            self.sample_table.set_ct_call({}, {})
+            return
+
+        checked = self.curve_viewer.channel_selector.checked_items()
+        if not checked:
+            self.sample_table.set_ct_call({}, {})
+            return
+
+        first_channel = checked[0]
+        ct_data: dict[str, float | None] = {}
+        call_data: dict[str, str] = {}
+        for well in self._data.wells:
+            ct_data[well] = self._baseline_results.ct.get(well, {}).get(first_channel)
+            call_data[well] = self._baseline_results.call.get(well, {}).get(first_channel, "N/A")
+
+        self.sample_table.set_ct_call(ct_data, call_data)
 
     # -- Helpers -------------------------------------------------------------
 

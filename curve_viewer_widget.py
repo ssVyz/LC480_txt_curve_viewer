@@ -8,8 +8,11 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt, Signal, QEvent
 
+import numpy as np
+
 from lc480_parser import LC480Data
 from color_settings import ColorSettings
+from baseline import BaselineResults
 
 # Global pyqtgraph config (white background)
 pg.setConfigOptions(background='w', foreground='k', antialias=True)
@@ -142,6 +145,7 @@ class CurveViewerWidget(QWidget):
         self._line_width: float = 1.0
         self._log_y: bool = False
         self._color_settings: ColorSettings | None = None
+        self._baseline_results: BaselineResults | None = None
 
         self._setup_ui()
         self._connect_signals()
@@ -163,7 +167,7 @@ class CurveViewerWidget(QWidget):
 
         toolbar.addWidget(QLabel("Display:"))
         self.display_combo = QComboBox()
-        self.display_combo.addItem("Raw Data")
+        self.display_combo.addItems(["Raw Data", "Baseline Subtracted", "Baseline Divided"])
         toolbar.addWidget(self.display_combo)
 
         toolbar.addSpacing(12)
@@ -226,6 +230,10 @@ class CurveViewerWidget(QWidget):
         self._selected_wells = set(wells)
         self.refresh()
 
+    def set_baseline_results(self, results: BaselineResults):
+        self._baseline_results = results
+        self.refresh()
+
     def set_color_settings(self, cs: ColorSettings):
         self._color_settings = cs
         self.color_mode_combo.blockSignals(True)
@@ -257,6 +265,27 @@ class CurveViewerWidget(QWidget):
 
     # -- Drawing helpers -----------------------------------------------------
 
+    def _get_y_data(self, well: str, channel: str) -> np.ndarray | None:
+        """Return the Y array for the current display mode, or None to skip."""
+        mode = self.display_combo.currentText()
+        if mode == "Raw Data":
+            return self._data.fluorescence.get(well, {}).get(channel)
+        if not self._baseline_results:
+            return None
+        if mode == "Baseline Subtracted":
+            return self._baseline_results.subtracted.get(well, {}).get(channel)
+        if mode == "Baseline Divided":
+            return self._baseline_results.divided.get(well, {}).get(channel)
+        return None
+
+    def _y_label(self) -> str:
+        mode = self.display_combo.currentText()
+        if mode == "Baseline Subtracted":
+            return "Fluorescence (RFU, baseline subtracted)"
+        if mode == "Baseline Divided":
+            return "Relative Fluorescence (RFI)"
+        return "Fluorescence (RFU)"
+
     def _pen_for(self, well: str, channel_index: int) -> pg.mkPen:
         if self._color_settings:
             c = self._color_settings.get_curve_color(well, channel_index)
@@ -270,14 +299,14 @@ class CurveViewerWidget(QWidget):
     def _draw_single(self, channel: str, wells: list[str]):
         plot = self.graphics_layout.addPlot(
             title=channel,
-            labels={'left': 'Fluorescence (RFU)', 'bottom': 'Cycle'},
+            labels={'left': self._y_label(), 'bottom': 'Cycle'},
         )
         if self._log_y:
             plot.setLogMode(y=True)
         ch_idx = (self._data.channels.index(channel)
                   if channel in self._data.channels else 0)
         for well in wells:
-            y = self._data.fluorescence.get(well, {}).get(channel)
+            y = self._get_y_data(well, channel)
             if y is not None:
                 plot.plot(self._data.cycles, y, pen=self._pen_for(well, ch_idx))
 
@@ -285,7 +314,7 @@ class CurveViewerWidget(QWidget):
         title = ", ".join(channels)
         plot = self.graphics_layout.addPlot(
             title=title,
-            labels={'left': 'Fluorescence (RFU)', 'bottom': 'Cycle'},
+            labels={'left': self._y_label(), 'bottom': 'Cycle'},
         )
         if self._log_y:
             plot.setLogMode(y=True)
@@ -293,7 +322,7 @@ class CurveViewerWidget(QWidget):
             ch_idx = (self._data.channels.index(channel)
                       if channel in self._data.channels else 0)
             for well in wells:
-                y = self._data.fluorescence.get(well, {}).get(channel)
+                y = self._get_y_data(well, channel)
                 if y is not None:
                     plot.plot(self._data.cycles, y,
                               pen=self._pen_for(well, ch_idx))
