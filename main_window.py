@@ -13,6 +13,7 @@ from sample_table_widget import SampleTableWidget
 from curve_viewer_widget import CurveViewerWidget
 from color_settings import ColorSettings, ColorSettingsDialog, SampleColorDialog
 from baseline import BaselineSettings, BaselineResults, compute_baseline, BaselineSettingsDialog
+from heatmap_dialog import HeatmapDialog
 
 
 class MainWindow(QMainWindow):
@@ -76,6 +77,11 @@ class MainWindow(QMainWindow):
         colors_act.triggered.connect(self._open_color_settings)
         baseline_act = settings_menu.addAction("&Baseline...")
         baseline_act.triggered.connect(self._open_baseline_settings)
+
+        # View menu
+        view_menu = self.menuBar().addMenu("&View")
+        heatmap_act = view_menu.addAction("&Heatmap")
+        heatmap_act.triggered.connect(self._open_heatmap)
 
     def _connect_signals(self):
         self.plate_map.selectionChanged.connect(self._on_plate_selection)
@@ -196,7 +202,7 @@ class MainWindow(QMainWindow):
         self._update_table_ct_call()
 
     def _update_table_ct_call(self):
-        """Update sample table Ct/Call columns for the first checked channel."""
+        """Update sample table Ct/Call/RFI columns for the first checked channel."""
         if not self._baseline_results or not self._data:
             self.sample_table.set_ct_call({}, {})
             return
@@ -209,11 +215,38 @@ class MainWindow(QMainWindow):
         first_channel = checked[0]
         ct_data: dict[str, float | None] = {}
         call_data: dict[str, str] = {}
+        rfi_data: dict[str, float | None] = {}
+        for well in self._data.wells:
+            ct_data[well] = self._baseline_results.ct.get(well, {}).get(first_channel)
+            call_data[well] = self._baseline_results.call.get(well, {}).get(first_channel, "N/A")
+            rfi_data[well] = self._baseline_results.endpoint_rfi.get(well, {}).get(first_channel)
+
+        self.sample_table.set_ct_call(ct_data, call_data, rfi_data)
+
+    # -- View dialogs --------------------------------------------------------
+
+    def _open_heatmap(self):
+        if not self._data or not self._baseline_results:
+            QMessageBox.information(self, "Heatmap", "No data loaded.")
+            return
+
+        checked = self.curve_viewer.channel_selector.checked_items()
+        if not checked:
+            QMessageBox.information(self, "Heatmap", "No channel selected.")
+            return
+
+        first_channel = checked[0]
+        ct_data: dict[str, float | None] = {}
+        call_data: dict[str, str] = {}
         for well in self._data.wells:
             ct_data[well] = self._baseline_results.ct.get(well, {}).get(first_channel)
             call_data[well] = self._baseline_results.call.get(well, {}).get(first_channel, "N/A")
 
-        self.sample_table.set_ct_call(ct_data, call_data)
+        dlg = HeatmapDialog(
+            self._data.wells, self._data.sample_names,
+            call_data, ct_data, channel=first_channel, parent=self,
+        )
+        dlg.exec()
 
     # -- Helpers -------------------------------------------------------------
 

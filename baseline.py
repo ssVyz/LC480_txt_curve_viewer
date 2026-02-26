@@ -35,6 +35,8 @@ class BaselineResults:
     ct: dict[str, dict[str, float | None]] = field(default_factory=dict)
     # call[well][channel] = "Positive" | "Negative" | "N/A"
     call: dict[str, dict[str, str]] = field(default_factory=dict)
+    # endpoint_rfi[well][channel] = divided value at last cycle, or None
+    endpoint_rfi: dict[str, dict[str, float | None]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +59,7 @@ def compute_baseline(data: LC480Data, settings: BaselineSettings) -> BaselineRes
         results.divided[well] = {}
         results.ct[well] = {}
         results.call[well] = {}
+        results.endpoint_rfi[well] = {}
 
         for channel in data.channels:
             fluor = data.fluorescence.get(well, {}).get(channel)
@@ -65,6 +68,7 @@ def compute_baseline(data: LC480Data, settings: BaselineSettings) -> BaselineRes
                 results.divided[well][channel] = None
                 results.ct[well][channel] = None
                 results.call[well][channel] = "N/A"
+                results.endpoint_rfi[well][channel] = None
                 continue
 
             # Fit linear baseline to the baseline region
@@ -81,6 +85,7 @@ def compute_baseline(data: LC480Data, settings: BaselineSettings) -> BaselineRes
                 results.divided[well][channel] = None
                 results.ct[well][channel] = None
                 results.call[well][channel] = "N/A"
+                results.endpoint_rfi[well][channel] = None
             else:
                 divided = fluor / baseline_curve
                 results.divided[well][channel] = divided
@@ -89,7 +94,8 @@ def compute_baseline(data: LC480Data, settings: BaselineSettings) -> BaselineRes
                 results.ct[well][channel] = _calc_ct(divided, settings.ct_threshold)
 
                 # Call: endpoint RFI >= call_threshold
-                endpoint_rfi = divided[-1]
+                endpoint_rfi = float(divided[-1])
+                results.endpoint_rfi[well][channel] = endpoint_rfi
                 if endpoint_rfi >= settings.call_threshold:
                     results.call[well][channel] = "Positive"
                 else:

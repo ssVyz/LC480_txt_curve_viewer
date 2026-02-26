@@ -20,8 +20,8 @@ class SampleTableWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Well", "Sample Name", "Ct", "Call"])
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels(["Well", "Sample Name", "Ct", "Call", "Endpoint RFI"])
         self.table.setSelectionBehavior(
             QTableWidget.SelectionBehavior.SelectRows
         )
@@ -51,13 +51,17 @@ class SampleTableWidget(QWidget):
             ct_item.setFlags(ct_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             call_item = QTableWidgetItem("")
             call_item.setFlags(call_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            rfi_item = QTableWidgetItem("")
+            rfi_item.setFlags(rfi_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(i, 0, well_item)
             self.table.setItem(i, 1, name_item)
             self.table.setItem(i, 2, ct_item)
             self.table.setItem(i, 3, call_item)
+            self.table.setItem(i, 4, rfi_item)
         self.table.resizeColumnToContents(0)
         self.table.resizeColumnToContents(2)
         self.table.resizeColumnToContents(3)
+        self.table.resizeColumnToContents(4)
         self._syncing = False
 
     def set_selection(self, wells: set[str]):
@@ -76,8 +80,9 @@ class SampleTableWidget(QWidget):
         self._syncing = False
 
     def set_ct_call(self, ct_data: dict[str, float | None],
-                    call_data: dict[str, str]):
-        """Update the Ct and Call columns for each well."""
+                    call_data: dict[str, str],
+                    rfi_data: dict[str, float | None] | None = None):
+        """Update the Ct, Call, and Endpoint RFI columns for each well."""
         for i in range(self.table.rowCount()):
             well_item = self.table.item(i, 0)
             if not well_item:
@@ -95,8 +100,16 @@ class SampleTableWidget(QWidget):
             if call_item:
                 call_item.setText(call_val)
 
+            if rfi_data is not None:
+                rfi_val = rfi_data.get(well)
+                rfi_text = f"{rfi_val:.3f}" if rfi_val is not None else ""
+                rfi_item = self.table.item(i, 4)
+                if rfi_item:
+                    rfi_item.setText(rfi_text)
+
         self.table.resizeColumnToContents(2)
         self.table.resizeColumnToContents(3)
+        self.table.resizeColumnToContents(4)
 
     def _on_selection_changed(self):
         if self._syncing:
