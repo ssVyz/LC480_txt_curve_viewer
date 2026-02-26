@@ -66,6 +66,9 @@ class MainWindow(QMainWindow):
         import_act = file_menu.addAction("&Import LC480 File...")
         import_act.setShortcut("Ctrl+O")
         import_act.triggered.connect(self._import_file)
+        export_act = file_menu.addAction("&Export Results as CSV...")
+        export_act.setShortcut("Ctrl+S")
+        export_act.triggered.connect(self._export_csv)
         file_menu.addSeparator()
         exit_act = file_menu.addAction("E&xit")
         exit_act.setShortcut("Ctrl+Q")
@@ -126,6 +129,47 @@ class MainWindow(QMainWindow):
         self._push_colors()
         self._recompute_baseline()
         self._update_status()
+
+    # -- File export ---------------------------------------------------------
+
+    def _export_csv(self):
+        if not self._data:
+            QMessageBox.information(self, "Export", "No data loaded.")
+            return
+
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "Export Results as CSV", "",
+            "CSV Files (*.csv);;All Files (*)",
+        )
+        if not filepath:
+            return
+
+        import csv
+
+        # Read current table contents (mirrors what the user sees)
+        table = self.sample_table.table
+        headers = []
+        for col in range(table.columnCount()):
+            headers.append(table.horizontalHeaderItem(col).text())
+
+        rows = []
+        for row in range(table.rowCount()):
+            row_data = []
+            for col in range(table.columnCount()):
+                item = table.item(row, col)
+                row_data.append(item.text() if item else "")
+            rows.append(row_data)
+
+        try:
+            with open(filepath, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
+        except OSError as exc:
+            QMessageBox.critical(self, "Export Error", str(exc))
+            return
+
+        self.statusBar().showMessage(f"Exported {len(rows)} rows to {filepath}")
 
     # -- Selection sync ------------------------------------------------------
 

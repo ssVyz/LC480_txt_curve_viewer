@@ -20,10 +20,10 @@ class LC480Data:
 
 
 def well_sort_key(well: str) -> tuple[int, int]:
-    """Sort key for well positions (A1, A2, ..., H12)."""
+    """Sort key for well positions, column-first (A1, B1, ..., H1, A2, ...)."""
     row = ord(well[0].upper()) - ord('A')
     col = int(well[1:])
-    return (row, col)
+    return (col, row)
 
 
 def parse_lc480_file(filepath: str | Path) -> LC480Data:

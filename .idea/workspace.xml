@@ -4,10 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="97a5d6b6-4cbf-4fe2-abf8-25e7f89afa2c" name="Changes" comment="curve display">
-      <change beforePath="$PROJECT_DIR$/baseline.py" beforeDir="false" afterPath="$PROJECT_DIR$/baseline.py" afterDir="false" />
+    <list default="true" id="97a5d6b6-4cbf-4fe2-abf8-25e7f89afa2c" name="Changes" comment="Heatmap implementation">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lc480_parser.py" beforeDir="false" afterPath="$PROJECT_DIR$/lc480_parser.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main_window.py" beforeDir="false" afterPath="$PROJECT_DIR$/main_window.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sample_table_widget.py" beforeDir="false" afterPath="$PROJECT_DIR$/sample_table_widget.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -92,12 +92,21 @@
       <option name="project" value="LOCAL" />
       <updated>1772094232294</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="Heatmap implementation">
+      <option name="closed" value="true" />
+      <created>1772094985258</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1772094985258</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Initial implementation" />
     <MESSAGE value="curve display" />
-    <option name="LAST_COMMIT_MESSAGE" value="curve display" />
+    <MESSAGE value="Heatmap implementation" />
+    <option name="LAST_COMMIT_MESSAGE" value="Heatmap implementation" />
   </component>
 </project>
