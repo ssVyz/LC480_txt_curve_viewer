@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
 from lc480_parser import LC480Data, parse_lc480_file
+from lcpro_parser import parse_lcpro_file
 from plate_map_widget import PlateMapWidget
 from sample_table_widget import SampleTableWidget
 from curve_viewer_widget import CurveViewerWidget
@@ -66,6 +67,8 @@ class MainWindow(QMainWindow):
         import_act = file_menu.addAction("&Import LC480 File...")
         import_act.setShortcut("Ctrl+O")
         import_act.triggered.connect(self._import_file)
+        import_pro_act = file_menu.addAction("Import LC-&Pro File...")
+        import_pro_act.triggered.connect(self._import_lcpro_file)
         export_act = file_menu.addAction("&Export Results as CSV...")
         export_act.setShortcut("Ctrl+S")
         export_act.triggered.connect(self._export_csv)
@@ -106,6 +109,20 @@ class MainWindow(QMainWindow):
             return
         try:
             self._data = parse_lc480_file(filepath)
+        except Exception as exc:
+            QMessageBox.critical(self, "Import Error", str(exc))
+            return
+        self._on_data_loaded()
+
+    def _import_lcpro_file(self):
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Import LC-Pro File", "",
+            "XML Files (*.xml);;All Files (*)",
+        )
+        if not filepath:
+            return
+        try:
+            self._data = parse_lcpro_file(filepath)
         except Exception as exc:
             QMessageBox.critical(self, "Import Error", str(exc))
             return

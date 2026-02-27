@@ -4,9 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="97a5d6b6-4cbf-4fe2-abf8-25e7f89afa2c" name="Changes" comment="Heatmap implementation">
+    <list default="true" id="97a5d6b6-4cbf-4fe2-abf8-25e7f89afa2c" name="Changes" comment="CSV export">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lc480_parser.py" beforeDir="false" afterPath="$PROJECT_DIR$/lc480_parser.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main_window.py" beforeDir="false" afterPath="$PROJECT_DIR$/main_window.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -30,12 +29,12 @@
     &quot;assignee&quot;: &quot;ssVyz&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/ssVyz/LC480_txt_curve_viewer.git",
-    "accountId": "ce403595-2ced-47fa-b6f2-02059543b5a5"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/ssVyz/LC480_txt_curve_viewer.git&quot;,
+    &quot;accountId&quot;: &quot;ce403595-2ced-47fa-b6f2-02059543b5a5&quot;
   }
-}]]></component>
+}</component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 7
 }</component>
@@ -100,13 +99,22 @@
       <option name="project" value="LOCAL" />
       <updated>1772094985258</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="CSV export">
+      <option name="closed" value="true" />
+      <created>1772113362060</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1772113362060</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Initial implementation" />
     <MESSAGE value="curve display" />
     <MESSAGE value="Heatmap implementation" />
-    <option name="LAST_COMMIT_MESSAGE" value="Heatmap implementation" />
+    <MESSAGE value="CSV export" />
+    <option name="LAST_COMMIT_MESSAGE" value="CSV export" />
   </component>
 </project>
