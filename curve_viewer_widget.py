@@ -195,6 +195,11 @@ class CurveViewerWidget(QWidget):
         self.line_width_spin.setFixedWidth(60)
         toolbar.addWidget(self.line_width_spin)
 
+        toolbar.addSpacing(12)
+
+        self.smooth_check = QCheckBox("Smooth")
+        toolbar.addWidget(self.smooth_check)
+
         toolbar.addStretch()
         layout.addLayout(toolbar)
 
@@ -210,6 +215,7 @@ class CurveViewerWidget(QWidget):
         self.color_mode_combo.currentTextChanged.connect(self._on_color_mode_changed)
         self.log_y_check.toggled.connect(self._on_log_y_changed)
         self.line_width_spin.valueChanged.connect(self._on_line_width_changed)
+        self.smooth_check.toggled.connect(lambda _: self.refresh())
 
     # -- Public API ----------------------------------------------------------
 
@@ -305,6 +311,16 @@ class CurveViewerWidget(QWidget):
             return (midpoints[:-1] + midpoints[1:]) / 2.0
         return cycles
 
+    def _smooth(self, y: np.ndarray) -> np.ndarray:
+        """Apply weighted smoothing: 50% actual point, 25% each neighbour."""
+        if not self.smooth_check.isChecked() or len(y) < 2:
+            return y
+        s = np.empty_like(y)
+        s[0] = 0.5 * y[0] + 0.5 * y[1]
+        s[-1] = 0.5 * y[-1] + 0.5 * y[-2]
+        s[1:-1] = 0.5 * y[1:-1] + 0.25 * y[:-2] + 0.25 * y[2:]
+        return s
+
     def _y_label(self) -> str:
         mode = self.display_combo.currentText()
         if mode == "First Derivative":
@@ -350,7 +366,7 @@ class CurveViewerWidget(QWidget):
         for well in wells:
             y = self._get_y_data(well, channel)
             if y is not None:
-                plot.plot(x, y, pen=self._pen_for(well, ch_idx))
+                plot.plot(x, self._smooth(y), pen=self._pen_for(well, ch_idx))
 
     def _draw_multi(self, channels: list[str], wells: list[str]):
         title = ", ".join(channels)
@@ -368,7 +384,7 @@ class CurveViewerWidget(QWidget):
             for well in wells:
                 y = self._get_y_data(well, channel)
                 if y is not None:
-                    plot.plot(x, y, pen=self._pen_for(well, ch_idx))
+                    plot.plot(x, self._smooth(y), pen=self._pen_for(well, ch_idx))
 
     # -- Slots ---------------------------------------------------------------
 

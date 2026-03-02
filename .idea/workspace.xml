@@ -4,8 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="97a5d6b6-4cbf-4fe2-abf8-25e7f89afa2c" name="Changes" comment="Added LC pro support">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    <list default="true" id="97a5d6b6-4cbf-4fe2-abf8-25e7f89afa2c" name="Changes" comment="derivative views">
       <change beforePath="$PROJECT_DIR$/curve_viewer_widget.py" beforeDir="false" afterPath="$PROJECT_DIR$/curve_viewer_widget.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -115,7 +114,15 @@
       <option name="project" value="LOCAL" />
       <updated>1772208211592</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="derivative views">
+      <option name="closed" value="true" />
+      <created>1772440455979</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1772440455979</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -124,6 +131,7 @@
     <MESSAGE value="Heatmap implementation" />
     <MESSAGE value="CSV export" />
     <MESSAGE value="Added LC pro support" />
-    <option name="LAST_COMMIT_MESSAGE" value="Added LC pro support" />
+    <MESSAGE value="derivative views" />
+    <option name="LAST_COMMIT_MESSAGE" value="derivative views" />
   </component>
 </project>
