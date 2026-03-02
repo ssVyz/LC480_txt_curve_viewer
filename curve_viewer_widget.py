@@ -167,7 +167,10 @@ class CurveViewerWidget(QWidget):
 
         toolbar.addWidget(QLabel("Display:"))
         self.display_combo = QComboBox()
-        self.display_combo.addItems(["Raw Data", "Baseline Subtracted", "Baseline Divided"])
+        self.display_combo.addItems([
+            "Raw Data", "Baseline Subtracted", "Baseline Divided",
+            "First Derivative", "Second Derivative",
+        ])
         toolbar.addWidget(self.display_combo)
 
         toolbar.addSpacing(12)
@@ -268,6 +271,19 @@ class CurveViewerWidget(QWidget):
     def _get_y_data(self, well: str, channel: str) -> np.ndarray | None:
         """Return the Y array for the current display mode, or None to skip."""
         mode = self.display_combo.currentText()
+
+        if mode in ("First Derivative", "Second Derivative"):
+            raw = self._data.fluorescence.get(well, {}).get(channel)
+            if raw is None:
+                return None
+            cycles = self._data.cycles
+            dx = np.diff(cycles)
+            first_deriv = np.diff(raw) / dx
+            if mode == "First Derivative":
+                return first_deriv
+            midpoints = (cycles[:-1] + cycles[1:]) / 2.0
+            return np.diff(first_deriv) / np.diff(midpoints)
+
         if mode == "Raw Data":
             return self._data.fluorescence.get(well, {}).get(channel)
         if not self._baseline_results:
@@ -278,8 +294,23 @@ class CurveViewerWidget(QWidget):
             return self._baseline_results.divided.get(well, {}).get(channel)
         return None
 
+    def _get_x_data(self) -> np.ndarray:
+        """Return the X array matching the current display mode."""
+        mode = self.display_combo.currentText()
+        cycles = self._data.cycles
+        if mode == "First Derivative":
+            return (cycles[:-1] + cycles[1:]) / 2.0
+        if mode == "Second Derivative":
+            midpoints = (cycles[:-1] + cycles[1:]) / 2.0
+            return (midpoints[:-1] + midpoints[1:]) / 2.0
+        return cycles
+
     def _y_label(self) -> str:
         mode = self.display_combo.currentText()
+        if mode == "First Derivative":
+            return "dF/dCycle"
+        if mode == "Second Derivative":
+            return "d\u00b2F/dCycle\u00b2"
         if mode == "Baseline Subtracted":
             return "Fluorescence (RFU, baseline subtracted)"
         if mode == "Baseline Divided":
@@ -296,6 +327,15 @@ class CurveViewerWidget(QWidget):
             width=self._line_width,
         )
 
+    def _add_zero_line(self, plot):
+        """Add a dotted y=0 reference line for derivative modes."""
+        if self.display_combo.currentText() in ("First Derivative", "Second Derivative"):
+            zero_line = pg.InfiniteLine(
+                pos=0, angle=0,
+                pen=pg.mkPen(color=(0, 0, 0, 150), width=1, style=Qt.PenStyle.DotLine),
+            )
+            plot.addItem(zero_line)
+
     def _draw_single(self, channel: str, wells: list[str]):
         plot = self.graphics_layout.addPlot(
             title=channel,
@@ -303,12 +343,14 @@ class CurveViewerWidget(QWidget):
         )
         if self._log_y:
             plot.setLogMode(y=True)
+        self._add_zero_line(plot)
+        x = self._get_x_data()
         ch_idx = (self._data.channels.index(channel)
                   if channel in self._data.channels else 0)
         for well in wells:
             y = self._get_y_data(well, channel)
             if y is not None:
-                plot.plot(self._data.cycles, y, pen=self._pen_for(well, ch_idx))
+                plot.plot(x, y, pen=self._pen_for(well, ch_idx))
 
     def _draw_multi(self, channels: list[str], wells: list[str]):
         title = ", ".join(channels)
@@ -318,14 +360,15 @@ class CurveViewerWidget(QWidget):
         )
         if self._log_y:
             plot.setLogMode(y=True)
+        self._add_zero_line(plot)
+        x = self._get_x_data()
         for channel in channels:
             ch_idx = (self._data.channels.index(channel)
                       if channel in self._data.channels else 0)
             for well in wells:
                 y = self._get_y_data(well, channel)
                 if y is not None:
-                    plot.plot(self._data.cycles, y,
-                              pen=self._pen_for(well, ch_idx))
+                    plot.plot(x, y, pen=self._pen_for(well, ch_idx))
 
     # -- Slots ---------------------------------------------------------------
 
