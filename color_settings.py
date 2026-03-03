@@ -79,7 +79,7 @@ class ColorButton(QPushButton):
 
     def _pick(self):
         c = QColorDialog.getColor(
-            self._color, self, "Select Color",
+            self._color, self.window(), "Select Color",
             QColorDialog.ColorDialogOption.DontUseNativeDialog,
         )
         if c.isValid():
