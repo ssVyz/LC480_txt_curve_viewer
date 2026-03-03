@@ -14,6 +14,9 @@ from sample_table_widget import SampleTableWidget
 from curve_viewer_widget import CurveViewerWidget
 from color_settings import ColorSettings, ColorSettingsDialog, SampleColorDialog
 from baseline import BaselineSettings, BaselineResults, compute_baseline, BaselineSettingsDialog
+from color_compensation import (
+    ColorCompensationSettings, ColorCompensationDialog, apply_color_compensation,
+)
 from heatmap_dialog import HeatmapDialog
 
 
@@ -28,6 +31,7 @@ class MainWindow(QMainWindow):
         self._color_settings = ColorSettings()
         self._baseline_settings = BaselineSettings()
         self._baseline_results: BaselineResults | None = None
+        self._color_comp_settings = ColorCompensationSettings()
 
         self._setup_ui()
         self._setup_menu()
@@ -83,6 +87,8 @@ class MainWindow(QMainWindow):
         colors_act.triggered.connect(self._open_color_settings)
         baseline_act = settings_menu.addAction("&Baseline...")
         baseline_act.triggered.connect(self._open_baseline_settings)
+        color_comp_act = settings_menu.addAction("Color &Compensation...")
+        color_comp_act.triggered.connect(self._open_color_compensation)
 
         # View menu
         view_menu = self.menuBar().addMenu("&View")
@@ -252,12 +258,26 @@ class MainWindow(QMainWindow):
             dlg.apply_to(self._baseline_settings)
             self._recompute_baseline()
 
+    def _open_color_compensation(self):
+        channels = self._data.channels if self._data else []
+        dlg = ColorCompensationDialog(
+            self._color_comp_settings, channels=channels, parent=self
+        )
+        if dlg.exec() == dlg.DialogCode.Accepted:
+            dlg.apply_to(self._color_comp_settings)
+            self._recompute_baseline()
+
     def _recompute_baseline(self):
         """Recompute baseline results and push to all widgets."""
         if not self._data:
             return
         self._baseline_results = compute_baseline(
             self._data, self._baseline_settings
+        )
+        # Apply color compensation (modifies divided data + recalculates Ct/Call)
+        self._baseline_results = apply_color_compensation(
+            self._baseline_results, self._color_comp_settings,
+            self._baseline_settings, self._data.wells, self._data.channels,
         )
         self.curve_viewer.set_baseline_results(self._baseline_results)
         self._update_table_ct_call()
