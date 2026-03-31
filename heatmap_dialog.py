@@ -1,6 +1,9 @@
 """Heatmap dialog showing a color-coded plate map based on Ct/Call results."""
 
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QWidget
+from PySide6.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QWidget, QCheckBox,
+    QDoubleSpinBox, QFormLayout, QGroupBox,
+)
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QColor, QPen, QFont, QLinearGradient
 
@@ -17,6 +20,7 @@ class HeatmapPlateWidget(QWidget):
 
     COLOR_NO_DATA = QColor(220, 220, 220)
     COLOR_NEGATIVE = QColor(76, 175, 80)       # green
+    COLOR_POSITIVE = QColor(244, 67, 54)       # red (flat mode)
     COLOR_LOW_CT = QColor(244, 67, 54)          # red (lowest Ct = highest conc)
     COLOR_HIGH_CT = QColor(255, 235, 59)        # yellow (highest Ct = lowest conc)
     COLOR_NA = QColor(189, 189, 189)            # gray for N/A
@@ -29,6 +33,9 @@ class HeatmapPlateWidget(QWidget):
         self._ct_data: dict[str, float | None] = {}
         self._ct_min: float | None = None
         self._ct_max: float | None = None
+        self._gradient_enabled: bool = True
+        self._red_point: float | None = None   # user-defined low Ct (red end)
+        self._yellow_point: float | None = None  # user-defined high Ct (yellow end)
         self.setMinimumSize(400, 300)
 
     def set_data(self, wells: list[str], sample_names: dict[str, str],
@@ -51,6 +58,23 @@ class HeatmapPlateWidget(QWidget):
             self._ct_max = None
 
         self.update()
+
+    def set_gradient_enabled(self, enabled: bool):
+        self._gradient_enabled = enabled
+        self.update()
+
+    def set_gradient_range(self, red_point: float | None, yellow_point: float | None):
+        self._red_point = red_point
+        self._yellow_point = yellow_point
+        self.update()
+
+    @property
+    def effective_red_point(self) -> float | None:
+        return self._red_point if self._red_point is not None else self._ct_min
+
+    @property
+    def effective_yellow_point(self) -> float | None:
+        return self._yellow_point if self._yellow_point is not None else self._ct_max
 
     # -- Geometry (same as PlateMapWidget) -----------------------------------
 
@@ -89,16 +113,22 @@ class HeatmapPlateWidget(QWidget):
         if call == "Negative":
             return QColor(self.COLOR_NEGATIVE)
 
-        # Positive: gradient from red (low Ct) to yellow (high Ct)
+        # Positive well
+        if not self._gradient_enabled:
+            return QColor(self.COLOR_POSITIVE)
+
+        # Gradient mode: red (low Ct) to yellow (high Ct)
         ct = self._ct_data.get(well)
         if ct is None:
             return QColor(self.COLOR_LOW_CT)
 
-        if self._ct_min is None or self._ct_max is None or self._ct_min == self._ct_max:
+        lo = self.effective_red_point
+        hi = self.effective_yellow_point
+        if lo is None or hi is None or lo == hi:
             return QColor(self.COLOR_LOW_CT)
 
-        # t=0 at min Ct (red), t=1 at max Ct (yellow)
-        t = (ct - self._ct_min) / (self._ct_max - self._ct_min)
+        # t=0 at red point (red), t=1 at yellow point (yellow)
+        t = (ct - lo) / (hi - lo)
         t = max(0.0, min(1.0, t))
         r = int(self.COLOR_LOW_CT.red() + t * (self.COLOR_HIGH_CT.red() - self.COLOR_LOW_CT.red()))
         g = int(self.COLOR_LOW_CT.green() + t * (self.COLOR_HIGH_CT.green() - self.COLOR_LOW_CT.green()))
@@ -222,7 +252,7 @@ class HeatmapDialog(QDialog):
         if channel:
             title += f" - {channel}"
         self.setWindowTitle(title)
-        self.resize(600, 480)
+        self.resize(600, 520)
 
         layout = QVBoxLayout(self)
 
@@ -233,6 +263,17 @@ class HeatmapDialog(QDialog):
         # Legend row
         legend_row = QHBoxLayout()
         legend_row.addSpacing(8)
+
+        # Positive swatch
+        pos_swatch = QLabel()
+        pos_swatch.setFixedSize(16, 16)
+        pos_swatch.setStyleSheet(
+            f"background-color: {HeatmapPlateWidget.COLOR_POSITIVE.name()}; "
+            "border: 1px solid #888; border-radius: 3px;"
+        )
+        legend_row.addWidget(pos_swatch)
+        legend_row.addWidget(QLabel("Positive"))
+        legend_row.addSpacing(16)
 
         # Negative swatch
         neg_swatch = QLabel()
@@ -259,7 +300,65 @@ class HeatmapDialog(QDialog):
         legend_row.addStretch()
         layout.addLayout(legend_row)
 
+        # Gradient controls
+        grad_group = QGroupBox()
+        grad_layout = QHBoxLayout(grad_group)
+
+        self._grad_checkbox = QCheckBox("Ct gradient")
+        self._grad_checkbox.setChecked(True)
+        grad_layout.addWidget(self._grad_checkbox)
+
+        grad_layout.addSpacing(16)
+
+        # Determine default spin box range from data
+        ct_min = self._plate._ct_min
+        ct_max = self._plate._ct_max
+
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+
+        self._red_spin = QDoubleSpinBox()
+        self._red_spin.setDecimals(1)
+        self._red_spin.setRange(0.0, 50.0)
+        self._red_spin.setSingleStep(0.5)
+        self._red_spin.setValue(ct_min if ct_min is not None else 0.0)
+        form.addRow("Red (low Ct):", self._red_spin)
+
+        self._yellow_spin = QDoubleSpinBox()
+        self._yellow_spin.setDecimals(1)
+        self._yellow_spin.setRange(0.0, 50.0)
+        self._yellow_spin.setSingleStep(0.5)
+        self._yellow_spin.setValue(ct_max if ct_max is not None else 45.0)
+        form.addRow("Yellow (high Ct):", self._yellow_spin)
+
+        grad_layout.addLayout(form)
+        grad_layout.addStretch()
+        layout.addWidget(grad_group)
+
         # Gradient legend for positives
         self._legend = GradientLegendWidget()
-        self._legend.set_range(self._plate._ct_min, self._plate._ct_max)
+        self._update_gradient()
         layout.addWidget(self._legend)
+
+        # Connections
+        self._grad_checkbox.toggled.connect(self._on_gradient_toggled)
+        self._red_spin.valueChanged.connect(self._on_range_changed)
+        self._yellow_spin.valueChanged.connect(self._on_range_changed)
+
+    def _on_gradient_toggled(self, checked: bool):
+        self._red_spin.setEnabled(checked)
+        self._yellow_spin.setEnabled(checked)
+        self._plate.set_gradient_enabled(checked)
+        self._update_gradient()
+
+    def _on_range_changed(self):
+        self._plate.set_gradient_range(self._red_spin.value(), self._yellow_spin.value())
+        self._update_gradient()
+
+    def _update_gradient(self):
+        if self._grad_checkbox.isChecked():
+            self._legend.set_range(self._red_spin.value(), self._yellow_spin.value())
+            self._legend.show()
+        else:
+            self._legend.set_range(None, None)
+            self._legend.hide()
