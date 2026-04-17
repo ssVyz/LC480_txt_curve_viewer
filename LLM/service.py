@@ -27,7 +27,9 @@ Guidelines:
 - A standard 96-well plate has rows A-H and columns 1-12. Wells are named like A1, B12, H6.
 - When checking whether wells are empty (loaded) or populated (filled), examine raw signal levels and \
 first derivatives. Empty wells typically have lower or near-zero fluorescence that stays flat \
-across cycles (very low max first derivative). Consider that sometimes individual channels could have been measured, but the assay actually does not include a dye for that channel. It may be necessary to identify first which channels have signals.
+across cycles (very low max first derivative). Consider that sometimes individual channels could \
+have been measured, but the assay actually does not include a dye for that channel. \
+It may be necessary to identify first which channels have signals.
 - Prefer the default baseline settings (start_cycle=3, end_cycle=8, ct_threshold=1.5, \
 call_threshold=1.5) unless a change is obviously needed or the user explicitly requests it.
 - Colors are hex strings: '#FF0000' red, '#00AA00' green, '#0000FF' blue, etc.
@@ -124,10 +126,13 @@ class GeminiService:
 
         # Extract parts into plain Python objects before returning
         _dbg("send_message: extracting response parts")
-        if response.candidates:
-            n_parts = len(response.candidates[0].content.parts)
+        candidate = response.candidates[0] if response.candidates else None
+        content = getattr(candidate, "content", None) if candidate else None
+        parts = getattr(content, "parts", None) if content else None
+        if parts:
+            n_parts = len(parts)
             _dbg(f"send_message: {n_parts} part(s) in response")
-            for i, part in enumerate(response.candidates[0].content.parts):
+            for i, part in enumerate(parts):
                 _dbg(f"send_message: part[{i}] type fields: "
                      f"function_call={part.function_call is not None}, "
                      f"text={bool(getattr(part, 'text', None))}")
@@ -147,7 +152,9 @@ class GeminiService:
                 else:
                     _dbg(f"send_message: part[{i}] is neither function_call nor text")
         else:
-            _dbg("send_message: no candidates in response")
+            _dbg("send_message: no usable parts in response "
+                 f"(candidates={bool(response.candidates)}, "
+                 f"content={content is not None})")
 
         _dbg(f"send_message: parsed OK — "
              f"{len(parsed.text_parts)} text, {len(parsed.function_calls)} func_calls")

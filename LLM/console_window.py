@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextBrowser,
-    QLineEdit, QPushButton, QLabel,
+    QLineEdit, QPushButton, QLabel, QCheckBox,
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -45,6 +45,8 @@ class LLMConsoleWindow(QWidget):
         self._service = GeminiService(api_key, token_limit)
         _dbg("LLMConsoleWindow.__init__: service created")
 
+        self._chat_blocks: list[tuple[str, str]] = []  # (kind, html) — "msg" or "debug"
+
         self._setup_ui()
 
         # Connect internal signals (queued: worker thread → main thread)
@@ -73,9 +75,15 @@ class LLMConsoleWindow(QWidget):
         input_row.addWidget(self._send_btn)
         layout.addLayout(input_row)
 
+        bottom_row = QHBoxLayout()
         self._token_label = QLabel()
         self._update_token_label()
-        layout.addWidget(self._token_label)
+        bottom_row.addWidget(self._token_label, stretch=1)
+
+        self._debug_check = QCheckBox("Show tool calls")
+        self._debug_check.toggled.connect(self._on_debug_toggled)
+        bottom_row.addWidget(self._debug_check)
+        layout.addLayout(bottom_row)
 
     # -- Sending messages ----------------------------------------------------
 
@@ -157,7 +165,8 @@ class LLMConsoleWindow(QWidget):
     def _on_error(self, error_text: str):
         _dbg(f"_on_error: {error_text[:200]}")
         self._update_token_label()
-        self._append_html(
+        self._append_block(
+            "msg",
             f'<div style="background:#FFEBEE; padding:8px; margin:4px 0; '
             f'border-radius:4px; white-space:pre-wrap;">'
             f'<b>Error:</b><br>{_esc(error_text)}</div>'
@@ -167,7 +176,8 @@ class LLMConsoleWindow(QWidget):
     # -- Chat display helpers ------------------------------------------------
 
     def _append_user(self, text: str):
-        self._append_html(
+        self._append_block(
+            "msg",
             f'<div style="background:#E3F2FD; padding:8px; margin:4px 0; border-radius:4px;">'
             f'<b>You:</b><br>{_esc(text)}</div>'
         )
@@ -175,7 +185,8 @@ class LLMConsoleWindow(QWidget):
     def _append_assistant(self, text: str):
         tokens = self._service.total_tokens
         limit = self._service.token_limit
-        self._append_html(
+        self._append_block(
+            "msg",
             f'<div style="background:#F5F5F5; padding:8px; margin:4px 0; border-radius:4px;">'
             f'<b>Assistant:</b><br>{_esc(text)}<br>'
             f'<span style="color:#888; font-size:0.85em;">'
@@ -186,7 +197,8 @@ class LLMConsoleWindow(QWidget):
 
     def _append_function_call(self, name: str, args: dict):
         args_str = json.dumps(args, indent=2) if args else "()"
-        self._append_html(
+        self._append_block(
+            "debug",
             f'<div style="background:#FFF3E0; padding:6px; margin:2px 0; '
             f'border-radius:4px; font-size:0.9em;">'
             f'<b>Call:</b> <code>{_esc(name)}</code><br>'
@@ -197,19 +209,35 @@ class LLMConsoleWindow(QWidget):
         result_str = json.dumps(result, indent=2, default=str)
         if len(result_str) > 2000:
             result_str = result_str[:2000] + "\n... (truncated)"
-        self._append_html(
+        self._append_block(
+            "debug",
             f'<div style="background:#E8F5E9; padding:6px; margin:2px 0; '
             f'border-radius:4px; font-size:0.9em;">'
             f'<b>Result:</b> <code>{_esc(name)}</code><br>'
             f'<pre style="margin:2px 0;">{_esc(result_str)}</pre></div>'
         )
 
-    def _append_html(self, html: str):
-        self._chat_view.append(html)
-        sb = self._chat_view.verticalScrollBar()
-        sb.setValue(sb.maximum())
+    def _append_block(self, kind: str, html: str):
+        """Append a chat block. kind is 'msg' or 'debug'."""
+        self._chat_blocks.append((kind, html))
+        if kind == "msg" or self._debug_check.isChecked():
+            self._chat_view.append(html)
+            sb = self._chat_view.verticalScrollBar()
+            sb.setValue(sb.maximum())
 
     # -- UI state ------------------------------------------------------------
+
+    def _on_debug_toggled(self, _checked: bool):
+        self._rebuild_chat_view()
+
+    def _rebuild_chat_view(self):
+        show_debug = self._debug_check.isChecked()
+        self._chat_view.clear()
+        for kind, html in self._chat_blocks:
+            if kind == "msg" or show_debug:
+                self._chat_view.append(html)
+        sb = self._chat_view.verticalScrollBar()
+        sb.setValue(sb.maximum())
 
     def _set_busy(self, busy: bool):
         self._input.setEnabled(not busy)
