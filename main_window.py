@@ -32,6 +32,7 @@ class MainWindow(QMainWindow):
         self._baseline_settings = BaselineSettings()
         self._baseline_results: BaselineResults | None = None
         self._color_comp_settings = ColorCompensationSettings()
+        self._inactive_wells: set[str] = set()
 
         self._setup_ui()
         self._setup_menu()
@@ -99,6 +100,8 @@ class MainWindow(QMainWindow):
         self.plate_map.selectionChanged.connect(self._on_plate_selection)
         self.plate_map.configureColorRequested.connect(self._on_configure_color)
         self.plate_map.clearColorRequested.connect(self._on_clear_color)
+        self.plate_map.inactivateRequested.connect(self._on_inactivate_wells)
+        self.plate_map.reactivateRequested.connect(self._on_reactivate_wells)
         self.sample_table.selectionChanged.connect(self._on_table_selection)
         self.curve_viewer.channel_selector.checkedItemsChanged.connect(
             lambda _: self._update_table_ct_call()
@@ -138,6 +141,7 @@ class MainWindow(QMainWindow):
         d = self._data
         self.setWindowTitle(f"LC480 Result Viewer - {d.experiment_name}")
 
+        self._inactive_wells = set()
         self.plate_map.set_data(d.wells, d.sample_names)
         self.sample_table.set_data(d)
         self.curve_viewer.set_data(d)
@@ -150,6 +154,7 @@ class MainWindow(QMainWindow):
         self._syncing = False
 
         self._push_colors()
+        self._push_inactive()
         self._recompute_baseline()
         self._update_status()
 
@@ -247,6 +252,22 @@ class MainWindow(QMainWindow):
         if changed:
             self._push_colors()
 
+    # -- Well activation management ------------------------------------------
+
+    def _push_inactive(self):
+        """Push inactive well state to all widgets."""
+        self.plate_map.set_inactive_wells(self._inactive_wells)
+        self.curve_viewer.set_inactive_wells(self._inactive_wells)
+        self.sample_table.set_inactive_wells(self._inactive_wells)
+
+    def _on_inactivate_wells(self, wells: set[str]):
+        self._inactive_wells |= wells
+        self._push_inactive()
+
+    def _on_reactivate_wells(self, wells: set[str]):
+        self._inactive_wells -= wells
+        self._push_inactive()
+
     # -- Baseline management -------------------------------------------------
 
     def _open_baseline_settings(self):
@@ -325,7 +346,8 @@ class MainWindow(QMainWindow):
 
         dlg = HeatmapDialog(
             self._data.wells, self._data.sample_names,
-            call_data, ct_data, channel=first_channel, parent=self,
+            call_data, ct_data, channel=first_channel,
+            inactive_wells=self._inactive_wells, parent=self,
         )
         dlg.exec()
 

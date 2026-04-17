@@ -31,6 +31,7 @@ class HeatmapPlateWidget(QWidget):
         self._sample_names: dict[str, str] = {}
         self._call_data: dict[str, str] = {}
         self._ct_data: dict[str, float | None] = {}
+        self._inactive_wells: set[str] = set()
         self._ct_min: float | None = None
         self._ct_max: float | None = None
         self._gradient_enabled: bool = True
@@ -66,6 +67,10 @@ class HeatmapPlateWidget(QWidget):
     def set_gradient_range(self, red_point: float | None, yellow_point: float | None):
         self._red_point = red_point
         self._yellow_point = yellow_point
+        self.update()
+
+    def set_inactive_wells(self, wells: set[str]):
+        self._inactive_wells = set(wells)
         self.update()
 
     @property
@@ -106,6 +111,8 @@ class HeatmapPlateWidget(QWidget):
     def _well_color(self, well: str) -> QColor:
         if well not in self._wells_with_data:
             return self.COLOR_NO_DATA
+        if well in self._inactive_wells:
+            return self.COLOR_NA
 
         call = self._call_data.get(well, "N/A")
         if call == "N/A":
@@ -246,7 +253,8 @@ class HeatmapDialog(QDialog):
 
     def __init__(self, wells: list[str], sample_names: dict[str, str],
                  call_data: dict[str, str], ct_data: dict[str, float | None],
-                 channel: str = "", parent=None):
+                 channel: str = "", inactive_wells: set[str] | None = None,
+                 parent=None):
         super().__init__(parent)
         title = "Heatmap"
         if channel:
@@ -258,6 +266,8 @@ class HeatmapDialog(QDialog):
 
         self._plate = HeatmapPlateWidget()
         self._plate.set_data(wells, sample_names, call_data, ct_data)
+        if inactive_wells:
+            self._plate.set_inactive_wells(inactive_wells)
         layout.addWidget(self._plate)
 
         # Legend row

@@ -142,6 +142,7 @@ class CurveViewerWidget(QWidget):
         super().__init__(parent)
         self._data: LC480Data | None = None
         self._selected_wells: set[str] = set()
+        self._inactive_wells: set[str] = set()
         self._line_width: float = 1.0
         self._log_y: bool = False
         self._color_settings: ColorSettings | None = None
@@ -239,6 +240,10 @@ class CurveViewerWidget(QWidget):
         self._selected_wells = set(wells)
         self.refresh()
 
+    def set_inactive_wells(self, wells: set[str]):
+        self._inactive_wells = set(wells)
+        self.refresh()
+
     def set_baseline_results(self, results: BaselineResults):
         self._baseline_results = results
         self.refresh()
@@ -262,7 +267,9 @@ class CurveViewerWidget(QWidget):
             self.status_label.setText("No channels selected")
             return
 
-        wells = sorted(self._selected_wells & set(self._data.wells))
+        wells = sorted(
+            (self._selected_wells - self._inactive_wells) & set(self._data.wells)
+        )
 
         if len(checked) == 1:
             self._draw_single(checked[0], wells)

@@ -11,6 +11,8 @@ class PlateMapWidget(QWidget):
     selectionChanged = Signal(set)
     configureColorRequested = Signal(set)   # wells to assign colour
     clearColorRequested = Signal(set)       # wells to clear colour from
+    inactivateRequested = Signal(set)       # wells to mark inactive
+    reactivateRequested = Signal(set)       # wells to reactivate
 
     ROWS = 8
     COLS = 12
@@ -25,6 +27,7 @@ class PlateMapWidget(QWidget):
         self._selected_wells: set[str] = set()
         self._sample_names: dict[str, str] = {}
         self._sample_colors: dict[str, QColor] = {}
+        self._inactive_wells: set[str] = set()
         self._hovered_well: str | None = None
 
         # Drag / rubber-band state
@@ -57,6 +60,13 @@ class PlateMapWidget(QWidget):
     def set_sample_colors(self, colors: dict[str, QColor]):
         self._sample_colors = dict(colors)
         self.update()
+
+    def set_inactive_wells(self, wells: set[str]):
+        self._inactive_wells = set(wells)
+        self.update()
+
+    def get_inactive_wells(self) -> set[str]:
+        return set(self._inactive_wells)
 
     # -- Geometry helpers ----------------------------------------------------
 
@@ -158,12 +168,25 @@ class PlateMapWidget(QWidget):
                 has_data = well in self._wells_with_data
                 is_sel = well in self._selected_wells
                 is_hover = well == self._hovered_well
+                is_inactive = well in self._inactive_wells
                 sc = self._sample_colors.get(well)
 
                 # Determine fill and border
                 if not has_data:
                     fill = QColor(220, 220, 220)
                     border = QColor(180, 180, 180)
+                    bw = 1.0
+                elif is_inactive:
+                    # Inactive wells: desaturated/faded version of their normal color
+                    if sc is not None:
+                        fill = QColor(sc.red(), sc.green(), sc.blue(), 60)
+                        border = QColor(sc.red(), sc.green(), sc.blue(), 100)
+                    elif is_sel:
+                        fill = QColor(0, 0, 0, 60)
+                        border = QColor(0, 0, 0, 100)
+                    else:
+                        fill = QColor(240, 240, 240)
+                        border = QColor(180, 180, 180)
                     bw = 1.0
                 elif sc is not None:
                     # Sample-coloured well
@@ -191,6 +214,17 @@ class PlateMapWidget(QWidget):
                 painter.setPen(QPen(border, bw))
                 painter.setBrush(fill)
                 painter.drawEllipse(rect)
+
+                # Draw diagonal cross for inactive wells
+                if is_inactive and has_data:
+                    cross_pen = QPen(QColor(180, 0, 0, 160), 1.5)
+                    painter.setPen(cross_pen)
+                    r = rect.width() / 2 * 0.6
+                    cx, cy = rect.center().x(), rect.center().y()
+                    painter.drawLine(
+                        QPointF(cx - r, cy - r), QPointF(cx + r, cy + r))
+                    painter.drawLine(
+                        QPointF(cx - r, cy + r), QPointF(cx + r, cy - r))
 
         # Rubber-band rectangle
         if self._drag_active and self._drag_start and self._drag_current:
@@ -339,10 +373,20 @@ class PlateMapWidget(QWidget):
         # Colour actions – only when there is a selection
         act_color = None
         act_clear = None
+        act_inactivate = None
+        act_reactivate = None
         if self._selected_wells:
             menu.addSeparator()
             act_color = menu.addAction("Configure Color...")
             act_clear = menu.addAction("Clear Sample Color")
+            menu.addSeparator()
+            # Show inactivate/reactivate based on current state of selection
+            has_active = bool(self._selected_wells - self._inactive_wells)
+            has_inactive = bool(self._selected_wells & self._inactive_wells)
+            if has_active:
+                act_inactivate = menu.addAction("Inactivate Selected Wells")
+            if has_inactive:
+                act_reactivate = menu.addAction("Reactivate Selected Wells")
 
         action = menu.exec(self.mapToGlobal(pos))
         if action is None:
@@ -359,6 +403,12 @@ class PlateMapWidget(QWidget):
             return
         elif action is act_clear:
             self.clearColorRequested.emit(set(self._selected_wells))
+            return
+        elif action is act_inactivate:
+            self.inactivateRequested.emit(set(self._selected_wells))
+            return
+        elif action is act_reactivate:
+            self.reactivateRequested.emit(set(self._selected_wells))
             return
 
         self.selectionChanged.emit(set(self._selected_wells))

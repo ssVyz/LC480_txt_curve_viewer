@@ -2,6 +2,7 @@
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem
 from PySide6.QtCore import Qt, Signal, QItemSelection, QItemSelectionModel
+from PySide6.QtGui import QColor
 
 from lc480_parser import LC480Data
 
@@ -110,6 +111,20 @@ class SampleTableWidget(QWidget):
         self.table.resizeColumnToContents(2)
         self.table.resizeColumnToContents(3)
         self.table.resizeColumnToContents(4)
+
+    def set_inactive_wells(self, wells: set[str]):
+        """Grey out rows for inactive wells."""
+        inactive_fg = QColor(180, 180, 180)
+        normal_fg = QColor(0, 0, 0)
+        for i in range(self.table.rowCount()):
+            well_item = self.table.item(i, 0)
+            if not well_item:
+                continue
+            fg = inactive_fg if well_item.text() in wells else normal_fg
+            for col in range(self.table.columnCount()):
+                item = self.table.item(i, col)
+                if item:
+                    item.setForeground(fg)
 
     def _on_selection_changed(self):
         if self._syncing:
