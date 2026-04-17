@@ -18,6 +18,7 @@ from color_compensation import (
     ColorCompensationSettings, ColorCompensationDialog, apply_color_compensation,
 )
 from heatmap_dialog import HeatmapDialog
+from LLM.settings_dialog import LLMSettingsDialog
 
 
 class MainWindow(QMainWindow):
@@ -33,6 +34,11 @@ class MainWindow(QMainWindow):
         self._baseline_results: BaselineResults | None = None
         self._color_comp_settings = ColorCompensationSettings()
         self._inactive_wells: set[str] = set()
+
+        # LLM state (not persisted)
+        self._llm_api_key: str = ""
+        self._llm_token_limit: int = 500_000
+        self._llm_console = None
 
         self._setup_ui()
         self._setup_menu()
@@ -95,6 +101,13 @@ class MainWindow(QMainWindow):
         view_menu = self.menuBar().addMenu("&View")
         heatmap_act = view_menu.addAction("&Heatmap")
         heatmap_act.triggered.connect(self._open_heatmap)
+
+        # LLM menu
+        llm_menu = self.menuBar().addMenu("&LLM")
+        llm_settings_act = llm_menu.addAction("&Settings...")
+        llm_settings_act.triggered.connect(self._open_llm_settings)
+        llm_console_act = llm_menu.addAction("Open &Console")
+        llm_console_act.triggered.connect(self._open_llm_console)
 
     def _connect_signals(self):
         self.plate_map.selectionChanged.connect(self._on_plate_selection)
@@ -350,6 +363,42 @@ class MainWindow(QMainWindow):
             inactive_wells=self._inactive_wells, parent=self,
         )
         dlg.exec()
+
+    # -- LLM ----------------------------------------------------------------
+
+    def _open_llm_settings(self):
+        dlg = LLMSettingsDialog(
+            api_key=self._llm_api_key,
+            token_limit=self._llm_token_limit,
+            parent=self,
+        )
+        if dlg.exec() == dlg.DialogCode.Accepted:
+            self._llm_api_key = dlg.get_api_key()
+            self._llm_token_limit = dlg.get_token_limit()
+
+    def _open_llm_console(self):
+        if self._llm_console is not None:
+            self._llm_console.activateWindow()
+            self._llm_console.raise_()
+            return
+
+        if not self._llm_api_key:
+            QMessageBox.information(
+                self, "LLM Console",
+                "Please configure your API key first via LLM > Settings.",
+            )
+            return
+
+        from LLM.console_window import LLMConsoleWindow
+
+        self._llm_console = LLMConsoleWindow(
+            self, self._llm_api_key, self._llm_token_limit
+        )
+        self._llm_console.closed.connect(self._on_llm_console_closed)
+        self._llm_console.show()
+
+    def _on_llm_console_closed(self):
+        self._llm_console = None
 
     # -- Helpers -------------------------------------------------------------
 
