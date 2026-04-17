@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import sys
+import threading
 import traceback
 from typing import TYPE_CHECKING
 
@@ -10,57 +12,45 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextBrowser,
     QLineEdit, QPushButton, QLabel,
 )
-from PySide6.QtCore import Qt, QThread, Signal, QObject
+from PySide6.QtCore import Qt, Signal
 
 from LLM.bridge import MainWindowBridge
-from LLM.service import GeminiService, TokenLimitReached
+from LLM.service import GeminiService, TokenLimitReached, ParsedResponse
 from LLM.functions import FUNCTION_MAP
 
 if TYPE_CHECKING:
     from main_window import MainWindow
 
 
-# ---------------------------------------------------------------------------
-# Background worker for the blocking API call
-# ---------------------------------------------------------------------------
+def _dbg(msg: str):
+    print(f"[LLM-DEBUG] {msg}", file=sys.stderr, flush=True)
 
-class _ApiWorker(QObject):
-    finished = Signal(object)
-    error = Signal(str)
-
-    def __init__(self, service: GeminiService, message):
-        super().__init__()
-        self._service = service
-        self._message = message
-
-    def run(self):
-        try:
-            response = self._service.send_message(self._message)
-            self.finished.emit(response)
-        except TokenLimitReached as exc:
-            self.error.emit(str(exc))
-        except Exception:
-            self.error.emit(traceback.format_exc())
-
-
-# ---------------------------------------------------------------------------
-# Console window
-# ---------------------------------------------------------------------------
 
 class LLMConsoleWindow(QWidget):
     closed = Signal()
 
+    # Internal signals for thread → main-thread communication
+    _api_finished = Signal(object)   # ParsedResponse
+    _api_error = Signal(str)
+
     def __init__(self, main_window: MainWindow, api_key: str, token_limit: int):
         super().__init__()
+        _dbg("LLMConsoleWindow.__init__: start")
         self.setWindowTitle("LLM Assistant")
         self.setWindowFlag(Qt.WindowType.Window)
         self.resize(620, 700)
 
         self._bridge = MainWindowBridge(main_window)
+        _dbg("LLMConsoleWindow.__init__: bridge created")
         self._service = GeminiService(api_key, token_limit)
-        self._thread: QThread | None = None
+        _dbg("LLMConsoleWindow.__init__: service created")
 
         self._setup_ui()
+
+        # Connect internal signals (queued: worker thread → main thread)
+        self._api_finished.connect(self._on_response)
+        self._api_error.connect(self._on_error)
+        _dbg("LLMConsoleWindow.__init__: done")
 
     # -- UI ------------------------------------------------------------------
 
@@ -93,72 +83,79 @@ class LLMConsoleWindow(QWidget):
         text = self._input.text().strip()
         if not text:
             return
+        _dbg(f"_on_send: user text='{text[:80]}...'")
         self._input.clear()
         self._append_user(text)
         self._set_busy(True)
         self._call_api(text)
 
-    def _call_api(self, message):
-        worker = _ApiWorker(self._service, message)
-        thread = QThread()
-        worker.moveToThread(thread)
+    def _call_api(self, message, is_function_result: bool = False):
+        """Run the blocking API call on a daemon thread."""
+        _dbg(f"_call_api: spawning thread (is_function_result={is_function_result})")
 
-        worker.finished.connect(self._on_response)
-        worker.error.connect(self._on_error)
-        worker.finished.connect(thread.quit)
-        worker.error.connect(thread.quit)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(worker.deleteLater)
-        thread.started.connect(worker.run)
+        def _worker():
+            _dbg(f"_worker: start (is_function_result={is_function_result})")
+            try:
+                if is_function_result:
+                    parsed = self._service.send_function_results(message)
+                else:
+                    parsed = self._service.send_message(message)
+                _dbg("_worker: emitting _api_finished")
+                self._api_finished.emit(parsed)
+            except TokenLimitReached as exc:
+                _dbg(f"_worker: TokenLimitReached: {exc}")
+                self._api_error.emit(str(exc))
+            except Exception:
+                tb = traceback.format_exc()
+                _dbg(f"_worker: exception:\n{tb}")
+                self._api_error.emit(tb)
+            _dbg("_worker: done")
 
-        # prevent GC
-        self._thread = thread
-        self._worker = worker
-
-        thread.start()
+        threading.Thread(target=_worker, daemon=True).start()
+        _dbg("_call_api: thread started")
 
     # -- Response handling ---------------------------------------------------
 
-    def _on_response(self, response):
+    def _on_response(self, parsed: ParsedResponse):
+        _dbg(f"_on_response: received ParsedResponse "
+             f"(text={len(parsed.text_parts)}, funcs={len(parsed.function_calls)}, "
+             f"in={parsed.input_tokens}, out={parsed.output_tokens})")
         self._update_token_label()
 
-        parts = response.candidates[0].content.parts
-        func_calls = [p for p in parts if p.function_call]
-        text_parts = [p.text for p in parts if hasattr(p, "text") and p.text]
-
-        if func_calls:
-            from google.genai import types
-
-            response_parts = []
-            for part in func_calls:
-                fc = part.function_call
-                args = dict(fc.args) if fc.args else {}
-                self._append_function_call(fc.name, args)
+        if parsed.function_calls:
+            _dbg(f"_on_response: processing {len(parsed.function_calls)} function call(s)")
+            results: list[tuple[str, dict]] = []
+            for fc in parsed.function_calls:
+                _dbg(f"_on_response: calling {fc.name}({list(fc.args.keys())})")
+                self._append_function_call(fc.name, fc.args)
 
                 fn = FUNCTION_MAP.get(fc.name)
                 if fn:
                     try:
-                        result = fn(self._bridge, **args)
+                        result = fn(self._bridge, **fc.args)
+                        _dbg(f"_on_response: {fc.name} returned OK, "
+                             f"keys={list(result.keys()) if isinstance(result, dict) else '?'}")
                     except Exception as exc:
+                        _dbg(f"_on_response: {fc.name} raised: {exc}")
                         result = {"error": str(exc)}
                 else:
+                    _dbg(f"_on_response: unknown function {fc.name}")
                     result = {"error": f"Unknown function: {fc.name}"}
 
                 self._append_function_result(fc.name, result)
-                response_parts.append(
-                    types.Part.from_function_response(name=fc.name, response=result)
-                )
+                results.append((fc.name, result))
 
-            # Send function results back to the model
-            self._call_api(response_parts)
+            _dbg(f"_on_response: sending {len(results)} function result(s) back to API")
+            self._call_api(results, is_function_result=True)
             return
 
-        # Text-only response
-        text = "\n".join(text_parts) if text_parts else "(no response)"
+        text = "\n".join(parsed.text_parts) if parsed.text_parts else "(no response)"
+        _dbg(f"_on_response: text response ({len(text)} chars), turn complete")
         self._append_assistant(text)
         self._set_busy(False)
 
     def _on_error(self, error_text: str):
+        _dbg(f"_on_error: {error_text[:200]}")
         self._update_token_label()
         self._append_html(
             f'<div style="background:#FFEBEE; padding:8px; margin:4px 0; '
@@ -198,7 +195,6 @@ class LLMConsoleWindow(QWidget):
 
     def _append_function_result(self, name: str, result: dict):
         result_str = json.dumps(result, indent=2, default=str)
-        # Truncate very long results for display
         if len(result_str) > 2000:
             result_str = result_str[:2000] + "\n... (truncated)"
         self._append_html(
@@ -232,6 +228,7 @@ class LLMConsoleWindow(QWidget):
         )
 
     def closeEvent(self, event):
+        _dbg("LLMConsoleWindow.closeEvent")
         self.closed.emit()
         super().closeEvent(event)
 

@@ -1,5 +1,10 @@
 """Gemini API service — manages client, chat session, and token tracking."""
 
+from __future__ import annotations
+
+import sys
+from dataclasses import dataclass, field
+
 from google import genai
 from google.genai import types
 
@@ -30,15 +35,37 @@ call_threshold=1.5) unless a change is obviously needed or the user explicitly r
 """
 
 
+def _dbg(msg: str):
+    """Print a debug message to stderr (survives crashes better than stdout)."""
+    print(f"[LLM-DEBUG] {msg}", file=sys.stderr, flush=True)
+
+
 class TokenLimitReached(Exception):
     pass
+
+
+@dataclass
+class FunctionCallInfo:
+    name: str
+    args: dict
+
+
+@dataclass
+class ParsedResponse:
+    """Thread-safe, plain-Python representation of a Gemini response."""
+    text_parts: list[str] = field(default_factory=list)
+    function_calls: list[FunctionCallInfo] = field(default_factory=list)
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 class GeminiService:
     """Wraps a Gemini chat session with token accounting."""
 
     def __init__(self, api_key: str, token_limit: int):
+        _dbg("GeminiService.__init__: creating client")
         self._client = genai.Client(api_key=api_key)
+        _dbg("GeminiService.__init__: client created, creating chat")
         self._token_limit = token_limit
         self.total_input_tokens = 0
         self.total_output_tokens = 0
@@ -49,6 +76,7 @@ class GeminiService:
                 tools=[types.Tool(function_declarations=ALL_DECLARATIONS)],
             ),
         )
+        _dbg("GeminiService.__init__: chat session created OK")
 
     @property
     def total_tokens(self) -> int:
@@ -58,8 +86,8 @@ class GeminiService:
     def token_limit(self) -> int:
         return self._token_limit
 
-    def send_message(self, message):
-        """Send a message (text or function-response parts) and return the response.
+    def send_message(self, message) -> ParsedResponse:
+        """Send a message and return a ParsedResponse with plain Python data.
 
         Raises TokenLimitReached if the cumulative token budget is exhausted.
         """
@@ -68,9 +96,75 @@ class GeminiService:
                 f"Token limit reached ({self.total_tokens:,} / {self._token_limit:,}). "
                 "Close and reopen the console to start a new session."
             )
+
+        msg_type = type(message).__name__
+        if isinstance(message, str):
+            _dbg(f"send_message: sending text ({len(message)} chars)")
+        elif isinstance(message, list):
+            _dbg(f"send_message: sending list of {len(message)} parts")
+        else:
+            _dbg(f"send_message: sending {msg_type}")
+
+        _dbg("send_message: calling chat.send_message ...")
         response = self._chat.send_message(message)
+        _dbg("send_message: response received from API")
+
+        # Extract token usage
+        parsed = ParsedResponse()
+        _dbg("send_message: extracting usage_metadata")
         usage = getattr(response, "usage_metadata", None)
         if usage:
-            self.total_input_tokens += getattr(usage, "prompt_token_count", 0) or 0
-            self.total_output_tokens += getattr(usage, "candidates_token_count", 0) or 0
-        return response
+            parsed.input_tokens = getattr(usage, "prompt_token_count", 0) or 0
+            parsed.output_tokens = getattr(usage, "candidates_token_count", 0) or 0
+            self.total_input_tokens += parsed.input_tokens
+            self.total_output_tokens += parsed.output_tokens
+            _dbg(f"send_message: tokens this call: in={parsed.input_tokens} out={parsed.output_tokens}")
+        else:
+            _dbg("send_message: no usage_metadata on response")
+
+        # Extract parts into plain Python objects before returning
+        _dbg("send_message: extracting response parts")
+        if response.candidates:
+            n_parts = len(response.candidates[0].content.parts)
+            _dbg(f"send_message: {n_parts} part(s) in response")
+            for i, part in enumerate(response.candidates[0].content.parts):
+                _dbg(f"send_message: part[{i}] type fields: "
+                     f"function_call={part.function_call is not None}, "
+                     f"text={bool(getattr(part, 'text', None))}")
+                if part.function_call:
+                    fc_name = part.function_call.name
+                    fc_args_raw = part.function_call.args
+                    _dbg(f"send_message: part[{i}] is function_call: {fc_name}, "
+                         f"args type={type(fc_args_raw).__name__}")
+                    args = dict(fc_args_raw) if fc_args_raw else {}
+                    _dbg(f"send_message: part[{i}] args converted to dict OK: {list(args.keys())}")
+                    parsed.function_calls.append(
+                        FunctionCallInfo(name=fc_name, args=args)
+                    )
+                elif hasattr(part, "text") and part.text:
+                    _dbg(f"send_message: part[{i}] is text ({len(part.text)} chars)")
+                    parsed.text_parts.append(part.text)
+                else:
+                    _dbg(f"send_message: part[{i}] is neither function_call nor text")
+        else:
+            _dbg("send_message: no candidates in response")
+
+        _dbg(f"send_message: parsed OK — "
+             f"{len(parsed.text_parts)} text, {len(parsed.function_calls)} func_calls")
+        return parsed
+
+    def send_function_results(self, results: list[tuple[str, dict]]) -> ParsedResponse:
+        """Send function results back to the model.
+
+        *results* is a list of (function_name, result_dict) tuples.
+        """
+        _dbg(f"send_function_results: building {len(results)} Part(s)")
+        response_parts = []
+        for i, (name, data) in enumerate(results):
+            _dbg(f"send_function_results: [{i}] name={name}, "
+                 f"data keys={list(data.keys()) if isinstance(data, dict) else '?'}")
+            part = types.Part.from_function_response(name=name, response=data)
+            _dbg(f"send_function_results: [{i}] Part created OK")
+            response_parts.append(part)
+        _dbg("send_function_results: all Parts built, calling send_message")
+        return self.send_message(response_parts)
