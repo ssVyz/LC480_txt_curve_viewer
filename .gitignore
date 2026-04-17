@@ -1,3 +1,4 @@
 .claude/
 example_files/
 *.md
+!README.md

@@ -19,9 +19,9 @@ from lc480_parser import LC480Data
 class BaselineSettings:
     """User-configurable baseline parameters."""
     start_cycle: int = 3
-    end_cycle: int = 15
+    end_cycle: int = 8
     ct_threshold: float = 1.5   # RFI threshold for Ct determination
-    call_threshold: float = 2.0  # RFI at endpoint for positive call
+    call_threshold: float = 1.5  # RFI at endpoint for positive call
 
 
 @dataclass

@@ -4,9 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="97a5d6b6-4cbf-4fe2-abf8-25e7f89afa2c" name="Changes" comment="color dialog fix">
+    <list default="true" id="97a5d6b6-4cbf-4fe2-abf8-25e7f89afa2c" name="Changes" comment="heatmap config">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/heatmap_dialog.py" beforeDir="false" afterPath="$PROJECT_DIR$/heatmap_dialog.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -147,7 +146,15 @@
       <option name="project" value="LOCAL" />
       <updated>1772536045124</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="heatmap config">
+      <option name="closed" value="true" />
+      <created>1774964200984</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1774964200984</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -160,6 +167,7 @@
     <MESSAGE value="smooth function" />
     <MESSAGE value="color comp test1" />
     <MESSAGE value="color dialog fix" />
-    <option name="LAST_COMMIT_MESSAGE" value="color dialog fix" />
+    <MESSAGE value="heatmap config" />
+    <option name="LAST_COMMIT_MESSAGE" value="heatmap config" />
   </component>
 </project>
