@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="97a5d6b6-4cbf-4fe2-abf8-25e7f89afa2c" name="Changes" comment="heatmap config">
+    <list default="true" id="97a5d6b6-4cbf-4fe2-abf8-25e7f89afa2c" name="Changes" comment="mostly working">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -46,8 +46,9 @@
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
     &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.service.executor&quot;: &quot;Run&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;
+    &quot;git-widget-placeholder&quot;: &quot;gemini&quot;
   }
 }</component>
   <component name="SharedIndexes">
@@ -154,7 +155,55 @@
       <option name="project" value="LOCAL" />
       <updated>1774964200984</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="baseline parameters">
+      <option name="closed" value="true" />
+      <created>1776413901599</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1776413901599</updated>
+    </task>
+    <task id="LOCAL-00013" summary="wells inactivate activate">
+      <option name="closed" value="true" />
+      <created>1776414952064</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1776414952064</updated>
+    </task>
+    <task id="LOCAL-00014" summary="initial implementation gemini">
+      <option name="closed" value="true" />
+      <created>1776424121395</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1776424121395</updated>
+    </task>
+    <task id="LOCAL-00015" summary="initial implementation fixed">
+      <option name="closed" value="true" />
+      <created>1776425871337</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1776425871337</updated>
+    </task>
+    <task id="LOCAL-00016" summary="system prompt tweak">
+      <option name="closed" value="true" />
+      <created>1776428777006</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1776428777006</updated>
+    </task>
+    <task id="LOCAL-00017" summary="mostly working">
+      <option name="closed" value="true" />
+      <created>1776452263220</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1776452263220</updated>
+    </task>
+    <option name="localTasksCounter" value="18" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -168,6 +217,12 @@
     <MESSAGE value="color comp test1" />
     <MESSAGE value="color dialog fix" />
     <MESSAGE value="heatmap config" />
-    <option name="LAST_COMMIT_MESSAGE" value="heatmap config" />
+    <MESSAGE value="baseline parameters" />
+    <MESSAGE value="wells inactivate activate" />
+    <MESSAGE value="initial implementation gemini" />
+    <MESSAGE value="initial implementation fixed" />
+    <MESSAGE value="system prompt tweak" />
+    <MESSAGE value="mostly working" />
+    <option name="LAST_COMMIT_MESSAGE" value="mostly working" />
   </component>
 </project>

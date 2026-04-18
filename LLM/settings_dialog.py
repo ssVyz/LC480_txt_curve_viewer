@@ -2,12 +2,18 @@
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QLineEdit,
-    QSpinBox, QPushButton, QHBoxLayout,
+    QSpinBox, QPushButton, QHBoxLayout, QCheckBox,
 )
 
 
 class LLMSettingsDialog(QDialog):
-    def __init__(self, api_key: str = "", token_limit: int = 500_000, parent=None):
+    def __init__(
+        self,
+        api_key: str = "",
+        token_limit: int = 500_000,
+        store_locally: bool = False,
+        parent=None,
+    ):
         super().__init__(parent)
         self.setWindowTitle("LLM Settings")
         self.setMinimumWidth(400)
@@ -19,6 +25,10 @@ class LLMSettingsDialog(QDialog):
         self._key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self._key_edit.setPlaceholderText("Google AI Studio API key")
         form.addRow("API Key:", self._key_edit)
+
+        self._store_check = QCheckBox("Store locally (.env file)")
+        self._store_check.setChecked(store_locally)
+        form.addRow("", self._store_check)
 
         self._limit_spin = QSpinBox()
         self._limit_spin.setRange(10_000, 10_000_000)
@@ -44,3 +54,6 @@ class LLMSettingsDialog(QDialog):
 
     def get_token_limit(self) -> int:
         return self._limit_spin.value()
+
+    def get_store_locally(self) -> bool:
+        return self._store_check.isChecked()

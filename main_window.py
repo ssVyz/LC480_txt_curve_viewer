@@ -19,6 +19,7 @@ from color_compensation import (
 )
 from heatmap_dialog import HeatmapDialog
 from LLM.settings_dialog import LLMSettingsDialog
+from LLM.env_store import load_api_key, save_api_key, clear_api_key
 
 
 class MainWindow(QMainWindow):
@@ -35,8 +36,8 @@ class MainWindow(QMainWindow):
         self._color_comp_settings = ColorCompensationSettings()
         self._inactive_wells: set[str] = set()
 
-        # LLM state (not persisted)
-        self._llm_api_key: str = ""
+        # LLM state (api key optionally persisted via .env)
+        self._llm_api_key: str = load_api_key()
         self._llm_token_limit: int = 500_000
         self._llm_console = None
 
@@ -367,14 +368,20 @@ class MainWindow(QMainWindow):
     # -- LLM ----------------------------------------------------------------
 
     def _open_llm_settings(self):
+        stored_key = load_api_key()
         dlg = LLMSettingsDialog(
             api_key=self._llm_api_key,
             token_limit=self._llm_token_limit,
+            store_locally=bool(stored_key),
             parent=self,
         )
         if dlg.exec() == dlg.DialogCode.Accepted:
             self._llm_api_key = dlg.get_api_key()
             self._llm_token_limit = dlg.get_token_limit()
+            if dlg.get_store_locally() and self._llm_api_key:
+                save_api_key(self._llm_api_key)
+            elif stored_key:
+                clear_api_key()
 
     def _open_llm_console(self):
         if self._llm_console is not None:
