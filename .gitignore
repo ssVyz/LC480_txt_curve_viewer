@@ -3,3 +3,4 @@ example_files/
 *.md
 !README.md
 .env
+.idea/
