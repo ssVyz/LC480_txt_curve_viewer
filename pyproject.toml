@@ -1,0 +1,12 @@
+[project]
+name = "lc480-result-viewer"
+version = "0.1.0"
+description = "Viewer for Roche LightCycler 480 qPCR amplification curves"
+requires-python = ">=3.12"
+dependencies = [
+    "PySide6>=6.10",
+    "pyqtgraph>=0.14",
+    "numpy>=2.0",
+    "python-dotenv>=1.0",
+    "google-genai>=1.0",
+]
