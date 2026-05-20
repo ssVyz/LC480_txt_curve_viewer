@@ -27,6 +27,12 @@ DEFAULT_CHANNEL_COLORS: list[QColor] = [
 NUM_CHANNEL_SLOTS = 10
 
 
+# -- Default result-call palette ---------------------------------------------
+
+DEFAULT_POSITIVE_COLOR: QColor = QColor(244, 67, 54, 180)   # red
+DEFAULT_NEGATIVE_COLOR: QColor = QColor(76, 175, 80, 180)   # green
+
+
 # -- Settings model ----------------------------------------------------------
 
 class ColorSettings:
@@ -36,15 +42,27 @@ class ColorSettings:
         self.base_color: QColor = QColor(0, 0, 0, 255)
         self.channel_colors: list[QColor] = [QColor(c) for c in DEFAULT_CHANNEL_COLORS]
         self.sample_colors: dict[str, QColor] = {}
-        self.color_mode: str = "Base Color"  # or "Channel Colors"
+        self.positive_color: QColor = QColor(DEFAULT_POSITIVE_COLOR)
+        self.negative_color: QColor = QColor(DEFAULT_NEGATIVE_COLOR)
+        # "Base Color" | "Channel Colors" | "Result Call"
+        self.color_mode: str = "Base Color"
 
-    def get_curve_color(self, well: str, channel_index: int) -> QColor:
+    def get_curve_color(self, well: str, channel_index: int,
+                        call: str | None = None) -> QColor:
         """Resolve the colour for a given well / channel.
 
-        Priority: sample colour > channel colour (if mode) > base colour.
+        Priority: sample colour > mode colour > base colour. In "Result Call"
+        mode the *call* string ("Positive"/"Negative") selects the colour;
+        anything else (e.g. "N/A") falls back to the base colour.
         """
         if well in self.sample_colors:
             return QColor(self.sample_colors[well])
+        if self.color_mode == "Result Call":
+            if call == "Positive":
+                return QColor(self.positive_color)
+            if call == "Negative":
+                return QColor(self.negative_color)
+            return QColor(self.base_color)
         if self.color_mode == "Channel Colors":
             idx = min(channel_index, len(self.channel_colors) - 1)
             return QColor(self.channel_colors[idx])
@@ -53,6 +71,8 @@ class ColorSettings:
     def reset_defaults(self):
         self.base_color = QColor(0, 0, 0, 255)
         self.channel_colors = [QColor(c) for c in DEFAULT_CHANNEL_COLORS]
+        self.positive_color = QColor(DEFAULT_POSITIVE_COLOR)
+        self.negative_color = QColor(DEFAULT_NEGATIVE_COLOR)
 
 
 # -- Small reusable widgets --------------------------------------------------
@@ -187,6 +207,21 @@ class ColorSettingsDialog(QDialog):
         ch_outer.addWidget(scroll)
         root.addWidget(ch_grp)
 
+        # -- Result call colours ---------------------------------------------
+        call_grp = QGroupBox("Result Call Colors")
+        call_grid = QGridLayout(call_grp)
+        call_grid.setColumnStretch(1, 1)
+
+        call_grid.addWidget(QLabel("Positive:"), 0, 0)
+        self._positive_editor = ColorEntryWidget(settings.positive_color)
+        call_grid.addWidget(self._positive_editor, 0, 1)
+
+        call_grid.addWidget(QLabel("Negative:"), 1, 0)
+        self._negative_editor = ColorEntryWidget(settings.negative_color)
+        call_grid.addWidget(self._negative_editor, 1, 1)
+
+        root.addWidget(call_grp)
+
         # -- Buttons ---------------------------------------------------------
         btn_row = QHBoxLayout()
         reset_btn = QPushButton("Reset to Defaults")
@@ -206,6 +241,8 @@ class ColorSettingsDialog(QDialog):
         self._base_editor.set_color(QColor(0, 0, 0, 255))
         for i, c in enumerate(DEFAULT_CHANNEL_COLORS):
             self._ch_editors[i].set_color(c)
+        self._positive_editor.set_color(QColor(DEFAULT_POSITIVE_COLOR))
+        self._negative_editor.set_color(QColor(DEFAULT_NEGATIVE_COLOR))
 
     def apply_to(self, settings: ColorSettings):
         """Write editor values back into *settings*."""
@@ -213,6 +250,8 @@ class ColorSettingsDialog(QDialog):
         settings.channel_colors = [
             ed.get_color() for ed in self._ch_editors
         ]
+        settings.positive_color = self._positive_editor.get_color()
+        settings.negative_color = self._negative_editor.get_color()
 
 
 class SampleColorDialog(QDialog):

@@ -45,12 +45,9 @@ def parse_lcpro_file(filepath: str | Path) -> LC480Data:
     sorted_filter_ids = sorted(channel_map.keys())
     data.channels = [channel_map[fid] for fid in sorted_filter_ids]
 
-    # Build segmentId -> channel name lookup
-    # segmentId pattern: channelNumber * 1000 + 32  (e.g. 22 -> 22032)
-    seg_to_channel: dict[str, str] = {}
-    for fid in sorted_filter_ids:
-        seg_id = str(fid * 1000 + 32)
-        seg_to_channel[seg_id] = channel_map[fid]
+    # segmentId encodes the channel in its high part: filterId * 1000 + N,
+    # where N is the segment's position in the PCR program (varies by protocol).
+    # Recover the channel via integer division so we don't depend on N.
 
     # -- Raw fluorescence from rundata/measurements --------------------------
     raw: dict[str, dict[str, list[tuple[int, float]]]] = {}
@@ -64,10 +61,13 @@ def parse_lcpro_file(filepath: str | Path) -> LC480Data:
 
         for curve_seg in measurement.findall("curveSegments/curveSegment"):
             seg_id_el = curve_seg.find("segmentId")
-            if seg_id_el is None:
+            if seg_id_el is None or not seg_id_el.text:
                 continue
-            seg_id = seg_id_el.text.strip()
-            channel_name = seg_to_channel.get(seg_id)
+            try:
+                filter_id = int(seg_id_el.text) // 1000
+            except ValueError:
+                continue
+            channel_name = channel_map.get(filter_id)
             if channel_name is None:
                 continue
 

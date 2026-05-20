@@ -45,8 +45,9 @@ def set_color_mode(bridge: MainWindowBridge, **kwargs) -> dict:
     if err := _require_data(bridge):
         return err
     mode = kwargs.get("mode", "")
-    if mode not in ("Base Color", "Channel Colors"):
-        return {"error": f"Invalid mode: {mode}. Use 'Base Color' or 'Channel Colors'."}
+    if mode not in ("Base Color", "Channel Colors", "Result Call"):
+        return {"error": f"Invalid mode: {mode}. Use 'Base Color', "
+                         f"'Channel Colors', or 'Result Call'."}
     return bridge.set_color_mode(mode)
 
 

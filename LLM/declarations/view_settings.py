@@ -76,14 +76,14 @@ clear_well_colors = types.FunctionDeclaration(
 
 set_color_mode = types.FunctionDeclaration(
     name="set_color_mode",
-    description="Switch the curve color mode. 'Base Color' uses a single color; 'Channel Colors' uses a distinct color per channel.",
+    description="Switch the curve color mode. 'Base Color' uses a single color; 'Channel Colors' uses a distinct color per channel; 'Result Call' colors curves by their positive/negative call.",
     parameters=types.Schema(
         type=types.Type.OBJECT,
         properties={
             "mode": types.Schema(
                 type=types.Type.STRING,
-                description="Color mode: 'Base Color' or 'Channel Colors'.",
-                enum=["Base Color", "Channel Colors"],
+                description="Color mode: 'Base Color', 'Channel Colors', or 'Result Call'.",
+                enum=["Base Color", "Channel Colors", "Result Call"],
             ),
         },
         required=["mode"],

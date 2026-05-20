@@ -178,7 +178,9 @@ class CurveViewerWidget(QWidget):
 
         toolbar.addWidget(QLabel("Colors:"))
         self.color_mode_combo = QComboBox()
-        self.color_mode_combo.addItems(["Base Color", "Channel Colors"])
+        self.color_mode_combo.addItems(
+            ["Base Color", "Channel Colors", "Result Call"]
+        )
         toolbar.addWidget(self.color_mode_combo)
 
         toolbar.addSpacing(12)
@@ -340,9 +342,13 @@ class CurveViewerWidget(QWidget):
             return "Relative Fluorescence (RFI)"
         return "Fluorescence (RFU)"
 
-    def _pen_for(self, well: str, channel_index: int) -> pg.mkPen:
+    def _pen_for(self, well: str, channel: str, channel_index: int) -> pg.mkPen:
         if self._color_settings:
-            c = self._color_settings.get_curve_color(well, channel_index)
+            call = None
+            if (self._color_settings.color_mode == "Result Call"
+                    and self._baseline_results):
+                call = self._baseline_results.call.get(well, {}).get(channel)
+            c = self._color_settings.get_curve_color(well, channel_index, call)
         else:
             c = QColor(0, 0, 0, 255)
         return pg.mkPen(
@@ -373,7 +379,8 @@ class CurveViewerWidget(QWidget):
         for well in wells:
             y = self._get_y_data(well, channel)
             if y is not None:
-                plot.plot(x, self._smooth(y), pen=self._pen_for(well, ch_idx))
+                plot.plot(x, self._smooth(y),
+                          pen=self._pen_for(well, channel, ch_idx))
 
     def _draw_multi(self, channels: list[str], wells: list[str]):
         title = ", ".join(channels)
@@ -391,7 +398,8 @@ class CurveViewerWidget(QWidget):
             for well in wells:
                 y = self._get_y_data(well, channel)
                 if y is not None:
-                    plot.plot(x, self._smooth(y), pen=self._pen_for(well, ch_idx))
+                    plot.plot(x, self._smooth(y),
+                              pen=self._pen_for(well, channel, ch_idx))
 
     # -- Slots ---------------------------------------------------------------
 
