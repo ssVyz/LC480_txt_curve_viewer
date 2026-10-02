@@ -137,6 +137,8 @@ docs/.doctrees/
 # md files
 *.md
 !README.md
+!CHANGELOG.md
+!CLAUDE.md
 
 # TXT files
 *.txt
