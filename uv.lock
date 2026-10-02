@@ -321,7 +321,7 @@ wheels = [
 
 [[package]]
 name = "lc480-result-viewer"
-version = "0.2.0"
+version = "0.2.1"
 source = { virtual = "." }
 dependencies = [
     { name = "google-genai" },

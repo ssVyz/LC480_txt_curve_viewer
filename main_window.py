@@ -18,6 +18,10 @@ from color_compensation import (
     ColorCompensationSettings, ColorCompensationDialog, apply_color_compensation,
 )
 from heatmap_dialog import HeatmapDialog
+from plate_setup import (
+    PlateSetup, FILE_FILTER as PLATE_FILE_FILTER,
+    save_plate_setup, load_plate_setup,
+)
 from LLM.settings_dialog import LLMSettingsDialog
 from LLM.env_store import load_api_key, save_api_key, clear_api_key
 
@@ -102,6 +106,11 @@ class MainWindow(QMainWindow):
         view_menu = self.menuBar().addMenu("&View")
         heatmap_act = view_menu.addAction("&Heatmap")
         heatmap_act.triggered.connect(self._open_heatmap)
+        view_menu.addSeparator()
+        save_plate_act = view_menu.addAction("&Save Plate...")
+        save_plate_act.triggered.connect(self._save_plate)
+        load_plate_act = view_menu.addAction("&Load Plate...")
+        load_plate_act.triggered.connect(self._load_plate)
 
         # LLM menu
         llm_menu = self.menuBar().addMenu("&LLM")
@@ -281,6 +290,69 @@ class MainWindow(QMainWindow):
     def _on_reactivate_wells(self, wells: set[str]):
         self._inactive_wells -= wells
         self._push_inactive()
+
+    # -- Plate setup save / load ---------------------------------------------
+
+    def _save_plate(self):
+        if not self._data:
+            QMessageBox.information(self, "Save Plate", "No data loaded.")
+            return
+
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "Save Plate Setup", "", PLATE_FILE_FILTER,
+        )
+        if not filepath:
+            return
+        if not filepath.lower().endswith(".plate"):
+            filepath += ".plate"
+
+        setup = PlateSetup(
+            well_colors=dict(self._color_settings.sample_colors),
+            inactive_wells=set(self._inactive_wells),
+        )
+        try:
+            save_plate_setup(filepath, setup, self._data.experiment_name)
+        except OSError as exc:
+            QMessageBox.critical(self, "Save Error", str(exc))
+            return
+
+        self.statusBar().showMessage(f"Saved plate setup to {filepath}")
+
+    def _load_plate(self):
+        if not self._data:
+            QMessageBox.information(self, "Load Plate", "No data loaded.")
+            return
+
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Load Plate Setup", "",
+            f"{PLATE_FILE_FILTER};;All Files (*)",
+        )
+        if not filepath:
+            return
+        try:
+            setup = load_plate_setup(filepath)
+        except (OSError, ValueError) as exc:
+            QMessageBox.critical(self, "Load Error", str(exc))
+            return
+
+        # Replace (not merge) so the saved configuration is reproduced exactly
+        self._color_settings.sample_colors.clear()
+        self._color_settings.sample_colors.update(setup.well_colors)
+        self._inactive_wells = set(setup.inactive_wells)
+        self._push_colors()
+        self._push_inactive()
+
+        msg = (
+            f"Loaded plate setup from {filepath}: "
+            f"{len(setup.well_colors)} colored, "
+            f"{len(setup.inactive_wells)} inactive wells"
+        )
+        unmatched = (
+            (setup.well_colors.keys() | setup.inactive_wells) - set(self._data.wells)
+        )
+        if unmatched:
+            msg += f" ({len(unmatched)} not in current data)"
+        self.statusBar().showMessage(msg)
 
     # -- Baseline management -------------------------------------------------
 

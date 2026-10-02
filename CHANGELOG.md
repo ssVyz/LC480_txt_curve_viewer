@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-02
+
+### Added
+- View > Save Plate / Load Plate: persist plate setup (custom well colors incl. transparency, inactive wells) as JSON `*.plate` files (`plate_setup.py`).
+  - Loading replaces the current plate configuration; requires imported data.
+  - Wells in the file without data in the current run are still applied; the status bar reports their count.
+
 ## [0.2.0] - 2026-10-02
 
 ### Added
