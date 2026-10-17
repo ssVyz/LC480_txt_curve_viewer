@@ -1,11 +1,13 @@
-"""Plate setup persistence: custom well colors and inactive wells as JSON *.plate files."""
+"""Plate setup persistence: well colors, inactive wells and baseline settings as JSON *.plate files."""
 
 import json
+import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 from PySide6.QtGui import QColor
 
+from baseline import BaselineSettings
 from lc480_parser import well_sort_key
 
 
@@ -22,6 +24,8 @@ class PlateSetup:
     """Per-well plate configuration."""
     well_colors: dict[str, QColor] = field(default_factory=dict)
     inactive_wells: set[str] = field(default_factory=set)
+    # None when the file predates baseline persistence (optional key, still format v1)
+    baseline: BaselineSettings | None = None
 
 
 # -- Color encoding (#RRGGBBAA, CSS order — not Qt's #AARRGGBB) --------------
@@ -44,6 +48,27 @@ def _check_well(well) -> str:
     return well
 
 
+def _check_baseline(value) -> BaselineSettings:
+    if not isinstance(value, dict):
+        raise ValueError("Malformed baseline settings.")
+    try:
+        start, end = value["start_cycle"], value["end_cycle"]
+        ct, call = value["ct_threshold"], value["call_threshold"]
+    except KeyError as exc:
+        raise ValueError(f"Missing baseline setting: {exc.args[0]}") from exc
+
+    def is_int(v):
+        return isinstance(v, int) and not isinstance(v, bool)
+
+    if not (is_int(start) and is_int(end) and 1 <= start < end):
+        raise ValueError(f"Invalid baseline region: {start!r} to {end!r}")
+    for name, v in (("ct_threshold", ct), ("call_threshold", call)):
+        if (not isinstance(v, (int, float)) or isinstance(v, bool)
+                or not math.isfinite(v) or v <= 0):
+            raise ValueError(f"Invalid {name}: {v!r}")
+    return BaselineSettings(start, end, float(ct), float(call))
+
+
 # -- Save / load -------------------------------------------------------------
 
 def save_plate_setup(filepath: str, setup: PlateSetup,
@@ -58,6 +83,8 @@ def save_plate_setup(filepath: str, setup: PlateSetup,
             for w in sorted(setup.well_colors, key=well_sort_key)
         },
     }
+    if setup.baseline is not None:
+        payload["baseline"] = asdict(setup.baseline)
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
         f.write("\n")
@@ -87,4 +114,6 @@ def load_plate_setup(filepath: str) -> PlateSetup:
         setup.inactive_wells.add(_check_well(well))
     for well, value in colors.items():
         setup.well_colors[_check_well(well)] = _hex_to_color(value)
+    if "baseline" in payload:
+        setup.baseline = _check_baseline(payload["baseline"])
     return setup

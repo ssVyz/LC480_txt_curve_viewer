@@ -23,6 +23,14 @@ class BaselineSettings:
     ct_threshold: float = 1.5   # RFI threshold for Ct determination
     call_threshold: float = 1.5  # RFI at endpoint for positive call
 
+    def clamp_to_cycles(self, num_cycles: int) -> bool:
+        """Fit the baseline region into 1..num_cycles (same limits as the
+        dialog: at least 2 points). Returns True if anything changed."""
+        old = (self.start_cycle, self.end_cycle)
+        self.end_cycle = max(2, min(self.end_cycle, num_cycles))
+        self.start_cycle = max(1, min(self.start_cycle, self.end_cycle - 1))
+        return (self.start_cycle, self.end_cycle) != old
+
 
 @dataclass
 class BaselineResults:

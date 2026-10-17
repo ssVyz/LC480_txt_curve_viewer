@@ -1,5 +1,7 @@
 """Main application window."""
 
+from dataclasses import replace
+
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QSplitter,
     QFileDialog, QMessageBox,
@@ -111,6 +113,8 @@ class MainWindow(QMainWindow):
         save_plate_act.triggered.connect(self._save_plate)
         load_plate_act = view_menu.addAction("&Load Plate...")
         load_plate_act.triggered.connect(self._load_plate)
+        reset_plate_act = view_menu.addAction("&Reset Plate View...")
+        reset_plate_act.triggered.connect(self._reset_plate_view)
 
         # LLM menu
         llm_menu = self.menuBar().addMenu("&LLM")
@@ -164,7 +168,8 @@ class MainWindow(QMainWindow):
         d = self._data
         self.setWindowTitle(f"LC480 Result Viewer - {d.experiment_name}")
 
-        self._inactive_wells = set()
+        # Well colors, inactive wells and baseline settings carry over between
+        # files; View > Reset Plate View returns them to defaults.
         self.plate_map.set_data(d.wells, d.sample_names)
         self.sample_table.set_data(d)
         self.curve_viewer.set_data(d)
@@ -309,6 +314,7 @@ class MainWindow(QMainWindow):
         setup = PlateSetup(
             well_colors=dict(self._color_settings.sample_colors),
             inactive_wells=set(self._inactive_wells),
+            baseline=replace(self._baseline_settings),
         )
         try:
             save_plate_setup(filepath, setup, self._data.experiment_name)
@@ -335,12 +341,11 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Load Error", str(exc))
             return
 
-        # Replace (not merge) so the saved configuration is reproduced exactly
-        self._color_settings.sample_colors.clear()
-        self._color_settings.sample_colors.update(setup.well_colors)
-        self._inactive_wells = set(setup.inactive_wells)
-        self._push_colors()
-        self._push_inactive()
+        # Replace (not merge) so the saved configuration is reproduced exactly;
+        # files without baseline settings fall back to the defaults
+        baseline = setup.baseline or BaselineSettings()
+        clamped = baseline.clamp_to_cycles(self._data.num_cycles)
+        self._apply_plate_state(setup.well_colors, setup.inactive_wells, baseline)
 
         msg = (
             f"Loaded plate setup from {filepath}: "
@@ -352,7 +357,33 @@ class MainWindow(QMainWindow):
         )
         if unmatched:
             msg += f" ({len(unmatched)} not in current data)"
+        if setup.baseline is None:
+            msg += "; no baseline settings in file, using defaults"
+        elif clamped:
+            msg += f"; baseline region adjusted to {self._data.num_cycles} cycles"
         self.statusBar().showMessage(msg)
+
+    def _reset_plate_view(self):
+        answer = QMessageBox.question(
+            self, "Reset Plate View",
+            "Reset well colors, inactive wells and baseline settings to defaults?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._apply_plate_state({}, set(), BaselineSettings())
+        self.statusBar().showMessage("Plate view reset to defaults")
+
+    def _apply_plate_state(self, well_colors: dict[str, QColor],
+                           inactive_wells: set[str],
+                           baseline: BaselineSettings):
+        """Replace well colors, inactive wells and baseline settings."""
+        self._color_settings.sample_colors.clear()
+        self._color_settings.sample_colors.update(well_colors)
+        self._inactive_wells = set(inactive_wells)
+        self._baseline_settings = baseline
+        self._push_colors()
+        self._push_inactive()
+        self._recompute_baseline()
 
     # -- Baseline management -------------------------------------------------
 

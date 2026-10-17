@@ -32,7 +32,7 @@ class MainWindowBridge:
             "channels": d.channels,
             "num_cycles": d.num_cycles,
             "sample_names": {w: n for w, n in d.sample_names.items() if n},
-            "inactive_wells": sorted(self._mw._inactive_wells),
+            "inactive_wells": sorted(self._mw._inactive_wells & set(d.wells)),
         }
 
     def get_well_data(self, wells: list[str], channels: list[str] | None) -> dict:
