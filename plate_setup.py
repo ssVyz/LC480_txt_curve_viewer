@@ -56,17 +56,31 @@ def _check_baseline(value) -> BaselineSettings:
         ct, call = value["ct_threshold"], value["call_threshold"]
     except KeyError as exc:
         raise ValueError(f"Missing baseline setting: {exc.args[0]}") from exc
+    # Adaptive end keys are optional (files from 0.2.2 don't have them)
+    defaults = BaselineSettings()
+    adaptive = value.get("adaptive_end", defaults.adaptive_end)
+    deriv = value.get("deriv_threshold", defaults.deriv_threshold)
+    min_cycles = value.get("min_cycles", defaults.min_cycles)
 
     def is_int(v):
         return isinstance(v, int) and not isinstance(v, bool)
 
     if not (is_int(start) and is_int(end) and 1 <= start < end):
         raise ValueError(f"Invalid baseline region: {start!r} to {end!r}")
-    for name, v in (("ct_threshold", ct), ("call_threshold", call)):
+    for name, v in (("ct_threshold", ct), ("call_threshold", call),
+                    ("deriv_threshold", deriv)):
         if (not isinstance(v, (int, float)) or isinstance(v, bool)
                 or not math.isfinite(v) or v <= 0):
             raise ValueError(f"Invalid {name}: {v!r}")
-    return BaselineSettings(start, end, float(ct), float(call))
+    if not isinstance(adaptive, bool):
+        raise ValueError(f"Invalid adaptive_end: {adaptive!r}")
+    if not (is_int(min_cycles) and min_cycles >= 2):
+        raise ValueError(f"Invalid min_cycles: {min_cycles!r}")
+    return BaselineSettings(
+        start, end, float(ct), float(call),
+        adaptive_end=adaptive, deriv_threshold=float(deriv),
+        min_cycles=min_cycles,
+    )
 
 
 # -- Save / load -------------------------------------------------------------

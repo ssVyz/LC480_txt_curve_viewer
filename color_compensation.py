@@ -114,6 +114,7 @@ def apply_color_compensation(
         ct=new_ct,
         call=new_call,
         endpoint_rfi=new_endpoint_rfi,
+        baseline_end=baseline_results.baseline_end,
     )
 
 

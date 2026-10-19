@@ -165,7 +165,8 @@ class MainWindowBridge:
     def set_baseline_settings(self, **kwargs) -> dict:
         bs = self._mw._baseline_settings
         changed = {}
-        for key in ("start_cycle", "end_cycle", "ct_threshold", "call_threshold"):
+        for key in ("start_cycle", "end_cycle", "ct_threshold", "call_threshold",
+                    "adaptive_end", "deriv_threshold", "min_cycles"):
             if key in kwargs and kwargs[key] is not None:
                 setattr(bs, key, kwargs[key])
                 changed[key] = kwargs[key]

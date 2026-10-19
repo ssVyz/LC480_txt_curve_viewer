@@ -97,7 +97,8 @@ def set_baseline_settings(bridge: MainWindowBridge, **kwargs) -> dict:
     if err := _require_data(bridge):
         return err
     params = {}
-    for key in ("start_cycle", "end_cycle", "ct_threshold", "call_threshold"):
+    for key in ("start_cycle", "end_cycle", "ct_threshold", "call_threshold",
+                "adaptive_end", "deriv_threshold", "min_cycles"):
         if key in kwargs:
             params[key] = kwargs[key]
     if not params:

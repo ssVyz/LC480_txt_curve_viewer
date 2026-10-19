@@ -208,12 +208,23 @@ class MainWindow(QMainWindow):
         for col in range(table.columnCount()):
             headers.append(table.horizontalHeaderItem(col).text())
 
+        # Baseline end actually used (adaptive end may shorten it per well),
+        # for the same channel as the table's Ct/Call columns
+        checked = self.curve_viewer.channel_selector.checked_items()
+        ends: dict[str, int | None] = {}
+        if checked and self._baseline_results:
+            ends = {w: by_ch.get(checked[0])
+                    for w, by_ch in self._baseline_results.baseline_end.items()}
+        headers.append("Baseline End")
+
         rows = []
         for row in range(table.rowCount()):
             row_data = []
             for col in range(table.columnCount()):
                 item = table.item(row, col)
                 row_data.append(item.text() if item else "")
+            end = ends.get(row_data[0])
+            row_data.append(str(end) if end is not None else "")
             rows.append(row_data)
 
         try:

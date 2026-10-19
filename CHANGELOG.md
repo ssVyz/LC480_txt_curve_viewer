@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-19
+
+### Added
+- Adaptive baseline end (Settings > Baseline, off by default) for runs where some curves rise very early, inside a baseline region that suits the rest.
+  - Per curve: if the raw 1st derivative between cycles c and c+1 exceeds a threshold (RFU/cycle, one value for all channels) inside the baseline region, that curve's baseline ends at cycle c. Curves that stay below the threshold use the regular region.
+  - A configurable minimum number of baseline cycles (default 3) keeps the region from getting too short.
+  - Saved in `*.plate` files as the optional keys `adaptive_end`, `deriv_threshold`, `min_cycles`. Files without them load with the feature off. The format version stays 1.
+  - The LLM `set_baseline_settings` function accepts the new settings.
+- CSV export has a `Baseline End` column with the last baseline cycle each well actually used, for the same channel as the Ct/Call columns.
+
 ## [0.2.2] - 2026-10-17
 
 ### Added

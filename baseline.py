@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QGroupBox, QLabel, QSpinBox, QDoubleSpinBox, QPushButton,
+    QGroupBox, QLabel, QSpinBox, QDoubleSpinBox, QPushButton, QCheckBox,
 )
 
 from lc480_parser import LC480Data
@@ -22,6 +22,11 @@ class BaselineSettings:
     end_cycle: int = 8
     ct_threshold: float = 1.5   # RFI threshold for Ct determination
     call_threshold: float = 1.5  # RFI at endpoint for positive call
+    # Adaptive end: per curve, end the region before the first raw 1st-derivative
+    # step (RFU/cycle) inside it that exceeds deriv_threshold
+    adaptive_end: bool = False
+    deriv_threshold: float = 0.1
+    min_cycles: int = 3  # adaptive end never shortens the region below this
 
     def clamp_to_cycles(self, num_cycles: int) -> bool:
         """Fit the baseline region into 1..num_cycles (same limits as the
@@ -45,6 +50,8 @@ class BaselineResults:
     call: dict[str, dict[str, str]] = field(default_factory=dict)
     # endpoint_rfi[well][channel] = divided value at last cycle, or None
     endpoint_rfi: dict[str, dict[str, float | None]] = field(default_factory=dict)
+    # baseline_end[well][channel] = last baseline cycle actually used, or None
+    baseline_end: dict[str, dict[str, int | None]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +67,6 @@ def compute_baseline(data: LC480Data, settings: BaselineSettings) -> BaselineRes
 
     cycles = data.cycles  # np.array([1, 2, ..., num_cycles])
     start_idx = settings.start_cycle - 1  # 0-based inclusive
-    end_idx = settings.end_cycle           # 0-based exclusive (so end_cycle is inclusive)
 
     for well in data.wells:
         results.subtracted[well] = {}
@@ -68,6 +74,7 @@ def compute_baseline(data: LC480Data, settings: BaselineSettings) -> BaselineRes
         results.ct[well] = {}
         results.call[well] = {}
         results.endpoint_rfi[well] = {}
+        results.baseline_end[well] = {}
 
         for channel in data.channels:
             fluor = data.fluorescence.get(well, {}).get(channel)
@@ -77,11 +84,15 @@ def compute_baseline(data: LC480Data, settings: BaselineSettings) -> BaselineRes
                 results.ct[well][channel] = None
                 results.call[well][channel] = "N/A"
                 results.endpoint_rfi[well][channel] = None
+                results.baseline_end[well][channel] = None
                 continue
 
             # Fit linear baseline to the baseline region
-            fit_x = cycles[start_idx:end_idx]
-            fit_y = fluor[start_idx:end_idx]
+            # (end_cycle is 1-based inclusive, i.e. the 0-based exclusive index)
+            end_cycle = _baseline_end_cycle(fluor, cycles, settings)
+            results.baseline_end[well][channel] = end_cycle
+            fit_x = cycles[start_idx:end_cycle]
+            fit_y = fluor[start_idx:end_cycle]
             slope, intercept = np.polyfit(fit_x, fit_y, 1)
             baseline_curve = slope * cycles + intercept
 
@@ -110,6 +121,27 @@ def compute_baseline(data: LC480Data, settings: BaselineSettings) -> BaselineRes
                     results.call[well][channel] = "Negative"
 
     return results
+
+
+def _baseline_end_cycle(fluor: np.ndarray, cycles: np.ndarray,
+                        settings: BaselineSettings) -> int:
+    """Last baseline cycle (1-based, inclusive) for one curve.
+
+    With adaptive_end, the region ends at cycle c when the 1st derivative
+    between cycles c and c+1 is the first in the region to exceed
+    deriv_threshold, but always keeps at least min_cycles cycles.
+    """
+    start, end = settings.start_cycle, settings.end_cycle
+    if not settings.adaptive_end:
+        return end
+    # deriv[k] = slope between cycles start+k and start+k+1
+    region = slice(start - 1, end)
+    deriv = np.diff(fluor[region]) / np.diff(cycles[region])
+    above = np.flatnonzero(deriv > settings.deriv_threshold)
+    if above.size == 0:
+        return end
+    min_end = min(end, start + settings.min_cycles - 1)
+    return max(start + int(above[0]), min_end)
 
 
 def _calc_ct(divided: np.ndarray, threshold: float) -> float | None:
@@ -170,6 +202,45 @@ class BaselineSettingsDialog(QDialog):
 
         root.addWidget(region_grp)
 
+        # -- Adaptive end --
+        adaptive_grp = QGroupBox("Adaptive Baseline End")
+        adaptive_lay = QGridLayout(adaptive_grp)
+
+        self._adaptive_check = QCheckBox("End region before the 1st derivative exceeds threshold")
+        self._adaptive_check.setToolTip(
+            "Per curve: if the raw 1st derivative between cycles c and c+1 exceeds "
+            "the threshold inside the baseline region, the region ends at cycle c. "
+            "Curves that stay below it use the regular region."
+        )
+        self._adaptive_check.setChecked(settings.adaptive_end)
+        adaptive_lay.addWidget(self._adaptive_check, 0, 0, 1, 2)
+
+        adaptive_lay.addWidget(QLabel("1st Derivative Threshold (RFU/cycle):"), 1, 0)
+        self._deriv_spin = QDoubleSpinBox()
+        self._deriv_spin.setRange(0.0001, 10000.0)
+        self._deriv_spin.setDecimals(4)
+        self._deriv_spin.setSingleStep(0.01)
+        self._deriv_spin.setValue(settings.deriv_threshold)
+        adaptive_lay.addWidget(self._deriv_spin, 1, 1)
+
+        adaptive_lay.addWidget(QLabel("Minimum Cycles:"), 2, 0)
+        self._min_spin = QSpinBox()
+        self._min_spin.setMinimum(2)
+        self._update_min_cycles_range()
+        self._min_spin.setValue(settings.min_cycles)
+        adaptive_lay.addWidget(self._min_spin, 2, 1)
+
+        # Minimum can't exceed the regular region length
+        self._start_spin.valueChanged.connect(self._update_min_cycles_range)
+        self._end_spin.valueChanged.connect(self._update_min_cycles_range)
+
+        self._adaptive_check.toggled.connect(self._deriv_spin.setEnabled)
+        self._adaptive_check.toggled.connect(self._min_spin.setEnabled)
+        self._deriv_spin.setEnabled(settings.adaptive_end)
+        self._min_spin.setEnabled(settings.adaptive_end)
+
+        root.addWidget(adaptive_grp)
+
         # -- Thresholds --
         thresh_grp = QGroupBox("Thresholds (RFI)")
         thresh_lay = QGridLayout(thresh_grp)
@@ -204,9 +275,17 @@ class BaselineSettingsDialog(QDialog):
         btn_row.addWidget(ok_btn)
         root.addLayout(btn_row)
 
+    def _update_min_cycles_range(self):
+        self._min_spin.setMaximum(
+            self._end_spin.value() - self._start_spin.value() + 1
+        )
+
     def apply_to(self, settings: BaselineSettings):
         """Write dialog values back to the settings object."""
         settings.start_cycle = self._start_spin.value()
         settings.end_cycle = self._end_spin.value()
         settings.ct_threshold = self._ct_spin.value()
         settings.call_threshold = self._call_spin.value()
+        settings.adaptive_end = self._adaptive_check.isChecked()
+        settings.deriv_threshold = self._deriv_spin.value()
+        settings.min_cycles = self._min_spin.value()

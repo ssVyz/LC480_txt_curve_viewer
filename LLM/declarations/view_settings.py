@@ -213,6 +213,28 @@ set_baseline_settings = types.FunctionDeclaration(
                 type=types.Type.NUMBER,
                 description="Endpoint RFI threshold for positive call (default: 1.5).",
             ),
+            "adaptive_end": types.Schema(
+                type=types.Type.BOOLEAN,
+                description=(
+                    "Per-curve adaptive baseline end (default: false). If the raw first "
+                    "derivative between cycles c and c+1 exceeds deriv_threshold inside the "
+                    "baseline region, that curve's region ends at cycle c. Useful when some "
+                    "curves rise very early (Ct ~6-8)."
+                ),
+            ),
+            "deriv_threshold": types.Schema(
+                type=types.Type.NUMBER,
+                description=(
+                    "Raw first-derivative threshold in RFU/cycle for adaptive_end "
+                    "(default: 0.1). Has no effect unless adaptive_end is true."
+                ),
+            ),
+            "min_cycles": types.Schema(
+                type=types.Type.INTEGER,
+                description=(
+                    "Minimum number of baseline cycles adaptive_end keeps (default: 3, >= 2)."
+                ),
+            ),
         },
     ),
 )
