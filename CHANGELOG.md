@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-10-20
+
+### Added
+- File > Import cobas 6800/8800 File: reads cobas 6800/8800 result export XML files (`cobas_parser.py`).
+  - The two PCR programs (5 + 45 cycles) are joined into one 50-cycle curve, the cycle numbering the cobas Ct values use. The program change between cycles 5 and 6 causes a small signal step, so set the baseline region to start at cycle 6 or later.
+  - Channels are named by filter: `Ch1` to `Ch5` (Ch5 is the internal control).
+  - Samples are named by barcode, controls by their label (e.g. `(-) Ctrl`). Well positions like `G01` become `G1`.
+  - If the file contains several runs, a dialog asks which run to load.
+
 ## [0.2.3] - 2026-10-19
 
 ### Added

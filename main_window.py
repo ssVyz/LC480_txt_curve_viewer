@@ -4,13 +4,14 @@ from dataclasses import replace
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QSplitter,
-    QFileDialog, QMessageBox,
+    QFileDialog, QMessageBox, QInputDialog,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
 from lc480_parser import LC480Data, parse_lc480_file
 from lcpro_parser import parse_lcpro_file
+from cobas_parser import parse_cobas_file
 from plate_map_widget import PlateMapWidget
 from sample_table_widget import SampleTableWidget
 from curve_viewer_widget import CurveViewerWidget
@@ -87,6 +88,8 @@ class MainWindow(QMainWindow):
         import_act.triggered.connect(self._import_file)
         import_pro_act = file_menu.addAction("Import LC-&Pro File...")
         import_pro_act.triggered.connect(self._import_lcpro_file)
+        import_cobas_act = file_menu.addAction("Import &cobas 6800/8800 File...")
+        import_cobas_act.triggered.connect(self._import_cobas_file)
         export_act = file_menu.addAction("&Export Results as CSV...")
         export_act.setShortcut("Ctrl+S")
         export_act.triggered.connect(self._export_csv)
@@ -162,6 +165,37 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Import Error", str(exc))
             return
+        self._on_data_loaded()
+
+    def _import_cobas_file(self):
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Import cobas 6800/8800 File", "",
+            "XML Files (*.xml);;All Files (*)",
+        )
+        if not filepath:
+            return
+        try:
+            runs = parse_cobas_file(filepath)
+        except Exception as exc:
+            QMessageBox.critical(self, "Import Error", str(exc))
+            return
+
+        # Runs share well positions, so only one can be shown at a time
+        if len(runs) > 1:
+            labels = [
+                f"{i}. {d.experiment_name} ({len(d.wells)} samples)"
+                for i, d in enumerate(runs, 1)
+            ]
+            label, ok = QInputDialog.getItem(
+                self, "Select Run",
+                f"The file contains {len(runs)} runs. Select the run to load:",
+                labels, 0, False,
+            )
+            if not ok:
+                return
+            self._data = runs[labels.index(label)]
+        else:
+            self._data = runs[0]
         self._on_data_loaded()
 
     def _on_data_loaded(self):

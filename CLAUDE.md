@@ -3,7 +3,7 @@
 PySide6 + pyqtgraph desktop viewer for Roche LightCycler 480 / LC Pro qPCR curves. Python >=3.12, managed with uv.
 
 - Run: `uv run main.py`
-- Parsers: `lc480_parser.py`, `lcpro_parser.py`; UI: `main_window.py` + `*_widget.py` / `*_dialog.py`; LLM console (Gemini): `LLM/`
+- Parsers: `lc480_parser.py`, `lcpro_parser.py`, `cobas_parser.py` (cobas 6800/8800 XML; one `LC480Data` per run); UI: `main_window.py` + `*_widget.py` / `*_dialog.py`; LLM console (Gemini): `LLM/`
 - Plate state (well colors in `ColorSettings.sample_colors`, `MainWindow._inactive_wells`) is saved/loaded via `plate_setup.py` (`*.plate`)
 
 ## Rules
