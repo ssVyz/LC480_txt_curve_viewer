@@ -25,8 +25,10 @@ class MainWindowBridge:
 
     def get_experiment_info(self) -> dict:
         d = self._mw._data
+        last_well = f"{chr(ord('A') + d.plate_rows - 1)}{d.plate_cols}"
         return {
             "experiment_name": d.experiment_name,
+            "plate_layout": f"{d.plate_rows * d.plate_cols} wells, A1-{last_well}",
             "num_wells": len(d.wells),
             "wells": d.wells,
             "channels": d.channels,

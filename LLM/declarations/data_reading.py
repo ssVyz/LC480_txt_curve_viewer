@@ -5,8 +5,9 @@ from google.genai import types
 get_experiment_info = types.FunctionDeclaration(
     name="get_experiment_info",
     description=(
-        "Get an overview of the currently loaded experiment: name, list of wells, "
-        "channels, number of cycles, and sample names. Call this first to understand "
+        "Get an overview of the currently loaded experiment: name, plate layout "
+        "(96 or 24 wells), list of wells with data, channels, number of cycles, "
+        "and sample names. Call this first to understand "
         "the plate layout before querying individual wells."
     ),
     parameters=types.Schema(

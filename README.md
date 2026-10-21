@@ -1,10 +1,10 @@
 # LC480 Result Viewer
 
-Desktop viewer for qPCR amplification curves from Roche LightCycler 480, LightCycler Pro and cobas 6800/8800 result exports. Built with PySide6 and pyqtgraph.
+Desktop viewer for qPCR amplification curves from Roche LightCycler 480, LightCycler Pro, cobas 6800/8800 and cobas 5800 result exports. Built with PySide6 and pyqtgraph.
 
 ## Features
 
-- Import LC480 text exports, LC Pro XML exports and cobas 6800/8800 XML exports
+- Import LC480 text exports, LC Pro XML exports, cobas 6800/8800 XML exports and cobas 5800 exports (zip of per-sample XMLs, 24-well plate)
 - Amplification curves with 1st/2nd derivative views, smoothing and log scale
 - Plate map with well selection, activation/inactivation and custom colors
 - Baseline correction (fixed or adaptive end), Ct and call calculation
@@ -34,6 +34,7 @@ To use the LLM console, enter a Google API key under **LLM > Settings** (stored 
 | `lc480_parser.py` | LC480 text export parser and the shared `LC480Data` model |
 | `lcpro_parser.py` | LC Pro XML parser |
 | `cobas_parser.py` | cobas 6800/8800 XML parser (one `LC480Data` per run) |
+| `cobas5800_parser.py` | cobas 5800 parser for zipped or loose per-sample XMLs (one `LC480Data` per run) |
 | `baseline.py` | Baseline correction, Ct/call calculation, baseline dialog |
 | `color_compensation.py` | Cross-talk correction and its dialog |
 | `color_settings.py` | Well/channel color settings |

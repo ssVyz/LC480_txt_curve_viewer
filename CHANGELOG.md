@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-10-21
+
+### Added
+- File > Import cobas 5800 Results: reads the cobas 5800 result export, a zip with one XML per sample (`cobas5800_parser.py`). One or more unpacked XML files can be selected instead.
+  - Each XML also repeats the control(s) the sample was validated against. Controls are loaded once and shown only in the run they were processed in, so a run that relied on an earlier run's controls has none on its plate.
+  - If the files contain several runs, a dialog asks which run to load.
+  - As with the 6800, the two PCR programs (5 + 45 cycles) are joined into 50 cycles, channels are `Ch1` to `Ch5` (Ch5 is the internal control), and the signal steps between cycles 5 and 6, so start the baseline region at cycle 6 or later.
+  - Samples are named by barcode, controls by their label. Run start times are shown in local time.
+- 24-well plate layout (A1-D6) for cobas 5800 runs: the plate map and heatmap draw wells that are not on the plate as faint outlines and grey out their row/column labels.
+- LLM `get_experiment_info` reports the plate layout.
+
 ## [0.2.4] - 2026-10-20
 
 ### Added

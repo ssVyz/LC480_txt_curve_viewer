@@ -28,6 +28,8 @@ class HeatmapPlateWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._wells_with_data: set[str] = set()
+        self._plate_rows = self.ROWS
+        self._plate_cols = self.COLS
         self._sample_names: dict[str, str] = {}
         self._call_data: dict[str, str] = {}
         self._ct_data: dict[str, float | None] = {}
@@ -58,6 +60,12 @@ class HeatmapPlateWidget(QWidget):
             self._ct_min = None
             self._ct_max = None
 
+        self.update()
+
+    def set_plate_size(self, rows: int, cols: int):
+        """Wells outside the first rows x cols do not exist on the plate."""
+        self._plate_rows = rows
+        self._plate_cols = cols
         self.update()
 
     def set_gradient_enabled(self, enabled: bool):
@@ -158,17 +166,18 @@ class HeatmapPlateWidget(QWidget):
         font.setPointSize(max(7, int(cell_size * 0.3)))
         painter.setFont(font)
 
-        # Column labels
-        painter.setPen(QColor(0, 0, 0))
+        # Column labels (grey outside the plate)
         for col in range(self.COLS):
             cx = ox + (col + 0.5) * cell_size
             r = QRectF(cx - cell_size / 2, 0, cell_size, self.LABEL_MARGIN)
+            painter.setPen(QColor(0, 0, 0) if col < self._plate_cols else QColor(190, 190, 190))
             painter.drawText(r, Qt.AlignmentFlag.AlignCenter, self.COL_LABELS[col])
 
         # Row labels
         for row in range(self.ROWS):
             cy = oy + (row + 0.5) * cell_size
             r = QRectF(0, cy - cell_size / 2, self.LABEL_MARGIN, cell_size)
+            painter.setPen(QColor(0, 0, 0) if row < self._plate_rows else QColor(190, 190, 190))
             painter.drawText(r, Qt.AlignmentFlag.AlignCenter, self.ROW_LABELS[row])
 
         # Wells
@@ -176,6 +185,12 @@ class HeatmapPlateWidget(QWidget):
             for col in range(self.COLS):
                 well = self._rc_to_well(row, col)
                 rect = self._well_rect(row, col)
+                # Not on this plate (e.g. 24-well cobas 5800): faint outline only
+                if row >= self._plate_rows or col >= self._plate_cols:
+                    painter.setPen(QPen(QColor(225, 225, 225), 1.0))
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawEllipse(rect)
+                    continue
                 fill = self._well_color(well)
                 border = fill.darker(120) if well in self._wells_with_data else QColor(180, 180, 180)
                 painter.setPen(QPen(border, 1.0))
@@ -254,7 +269,7 @@ class HeatmapDialog(QDialog):
     def __init__(self, wells: list[str], sample_names: dict[str, str],
                  call_data: dict[str, str], ct_data: dict[str, float | None],
                  channel: str = "", inactive_wells: set[str] | None = None,
-                 parent=None):
+                 plate_size: tuple[int, int] | None = None, parent=None):
         super().__init__(parent)
         title = "Heatmap"
         if channel:
@@ -268,6 +283,8 @@ class HeatmapDialog(QDialog):
         self._plate.set_data(wells, sample_names, call_data, ct_data)
         if inactive_wells:
             self._plate.set_inactive_wells(inactive_wells)
+        if plate_size:
+            self._plate.set_plate_size(*plate_size)
         layout.addWidget(self._plate)
 
         # Legend row

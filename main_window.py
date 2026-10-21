@@ -12,6 +12,7 @@ from PySide6.QtGui import QColor
 from lc480_parser import LC480Data, parse_lc480_file
 from lcpro_parser import parse_lcpro_file
 from cobas_parser import parse_cobas_file
+from cobas5800_parser import parse_cobas5800_files
 from plate_map_widget import PlateMapWidget
 from sample_table_widget import SampleTableWidget
 from curve_viewer_widget import CurveViewerWidget
@@ -90,6 +91,8 @@ class MainWindow(QMainWindow):
         import_pro_act.triggered.connect(self._import_lcpro_file)
         import_cobas_act = file_menu.addAction("Import &cobas 6800/8800 File...")
         import_cobas_act.triggered.connect(self._import_cobas_file)
+        import_c5800_act = file_menu.addAction("Import cobas &5800 Results...")
+        import_c5800_act.triggered.connect(self._import_cobas5800_files)
         export_act = file_menu.addAction("&Export Results as CSV...")
         export_act.setShortcut("Ctrl+S")
         export_act.triggered.connect(self._export_csv)
@@ -179,7 +182,25 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Import Error", str(exc))
             return
+        self._load_run(runs)
 
+    def _import_cobas5800_files(self):
+        # The export is a zip of one XML per sample; unpacked XMLs work too
+        filepaths, _ = QFileDialog.getOpenFileNames(
+            self, "Import cobas 5800 Results", "",
+            "cobas 5800 Results (*.zip *.xml);;All Files (*)",
+        )
+        if not filepaths:
+            return
+        try:
+            runs = parse_cobas5800_files(filepaths)
+        except Exception as exc:
+            QMessageBox.critical(self, "Import Error", str(exc))
+            return
+        self._load_run(runs)
+
+    def _load_run(self, runs: list[LC480Data]):
+        """Load one of the parsed runs, asking which if there are several."""
         # Runs share well positions, so only one can be shown at a time
         if len(runs) > 1:
             labels = [
@@ -188,7 +209,7 @@ class MainWindow(QMainWindow):
             ]
             label, ok = QInputDialog.getItem(
                 self, "Select Run",
-                f"The file contains {len(runs)} runs. Select the run to load:",
+                f"Found {len(runs)} runs. Select the run to load:",
                 labels, 0, False,
             )
             if not ok:
@@ -204,7 +225,7 @@ class MainWindow(QMainWindow):
 
         # Well colors, inactive wells and baseline settings carry over between
         # files; View > Reset Plate View returns them to defaults.
-        self.plate_map.set_data(d.wells, d.sample_names)
+        self.plate_map.set_data(d.wells, d.sample_names, d.plate_rows, d.plate_cols)
         self.sample_table.set_data(d)
         self.curve_viewer.set_data(d)
 
@@ -509,7 +530,8 @@ class MainWindow(QMainWindow):
         dlg = HeatmapDialog(
             self._data.wells, self._data.sample_names,
             call_data, ct_data, channel=first_channel,
-            inactive_wells=self._inactive_wells, parent=self,
+            inactive_wells=self._inactive_wells,
+            plate_size=(self._data.plate_rows, self._data.plate_cols), parent=self,
         )
         dlg.exec()
 

@@ -17,6 +17,9 @@ class LC480Data:
     num_cycles: int = 0
     fluorescence: dict[str, dict[str, np.ndarray]] = field(default_factory=dict)
     cycles: np.ndarray = field(default_factory=lambda: np.array([]))
+    # Wells that exist on the instrument's plate: rows A.., columns 1..
+    plate_rows: int = 8
+    plate_cols: int = 12
 
 
 def well_sort_key(well: str) -> tuple[int, int]:

@@ -24,6 +24,8 @@ class PlateMapWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._wells_with_data: set[str] = set()
+        self._plate_rows = self.ROWS
+        self._plate_cols = self.COLS
         self._selected_wells: set[str] = set()
         self._sample_names: dict[str, str] = {}
         self._sample_colors: dict[str, QColor] = {}
@@ -44,9 +46,13 @@ class PlateMapWidget(QWidget):
 
     # -- Public API ----------------------------------------------------------
 
-    def set_data(self, wells: list[str], sample_names: dict[str, str]):
+    def set_data(self, wells: list[str], sample_names: dict[str, str],
+                 plate_rows: int = ROWS, plate_cols: int = COLS):
+        """Wells outside the first plate_rows x plate_cols do not exist on the plate."""
         self._wells_with_data = set(wells)
         self._sample_names = dict(sample_names)
+        self._plate_rows = plate_rows
+        self._plate_cols = plate_cols
         self.update()
 
     def set_selection(self, wells: set[str]):
@@ -147,17 +153,18 @@ class PlateMapWidget(QWidget):
         font.setPointSize(max(7, int(cell_size * 0.3)))
         painter.setFont(font)
 
-        # Column labels
-        painter.setPen(QColor(0, 0, 0))
+        # Column labels (grey outside the plate)
         for col in range(self.COLS):
             cx = ox + (col + 0.5) * cell_size
             r = QRectF(cx - cell_size / 2, 0, cell_size, self.LABEL_MARGIN)
+            painter.setPen(QColor(0, 0, 0) if col < self._plate_cols else QColor(190, 190, 190))
             painter.drawText(r, Qt.AlignmentFlag.AlignCenter, self.COL_LABELS[col])
 
         # Row labels
         for row in range(self.ROWS):
             cy = oy + (row + 0.5) * cell_size
             r = QRectF(0, cy - cell_size / 2, self.LABEL_MARGIN, cell_size)
+            painter.setPen(QColor(0, 0, 0) if row < self._plate_rows else QColor(190, 190, 190))
             painter.drawText(r, Qt.AlignmentFlag.AlignCenter, self.ROW_LABELS[row])
 
         # Wells
@@ -165,6 +172,14 @@ class PlateMapWidget(QWidget):
             for col in range(self.COLS):
                 well = self._rc_to_well(row, col)
                 rect = self._well_rect(row, col)
+
+                # Not on this plate (e.g. 24-well cobas 5800): faint outline only
+                if row >= self._plate_rows or col >= self._plate_cols:
+                    painter.setPen(QPen(QColor(225, 225, 225), 1.0))
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawEllipse(rect)
+                    continue
+
                 has_data = well in self._wells_with_data
                 is_sel = well in self._selected_wells
                 is_hover = well == self._hovered_well
