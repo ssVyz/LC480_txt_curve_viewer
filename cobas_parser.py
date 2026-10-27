@@ -3,6 +3,7 @@
 import numpy as np
 import xml.etree.ElementTree as ET
 from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import Path
 
 from lc480_parser import LC480Data, well_sort_key
@@ -31,29 +32,20 @@ def _sample_name(order: ET.Element) -> str:
     return (label or el.get("Barcode", "")).strip()
 
 
-def parse_cobas_file(filepath: str | Path) -> list[LC480Data]:
-    """Parse a cobas 6800/8800 result export XML file.
-
-    An export can hold test orders from several runs (AD plates) whose well
-    positions overlap, so one LC480Data is returned per run, oldest first.
-    """
-    filepath = Path(filepath)
-
-    # run_id -> well -> channel key (excitation, emission) -> [(program, seq, value)]
-    raw: dict[str, dict[str, dict[tuple[int, int], list[tuple[int, int, float]]]]] = (
-        defaultdict(dict)
-    )
-    sample_names: dict[str, dict[str, str]] = defaultdict(dict)
-    run_start: dict[str, str] = {}
-    run_tests: dict[str, set[str]] = defaultdict(set)
-    test_names: dict[str, str] = {}
+def _read_file(filepath: Path, raw, sample_names, run_start, run_tests,
+               test_names) -> str:
+    """Add one export file's runs to the dicts; returns its software version."""
+    # (run, well) read from this file
+    file_wells: set[tuple[str, str]] = set()
 
     # Stream the file: full exports are large, mostly process logs and
     # embedded algorithm files that are not needed here
     context = ET.iterparse(filepath, events=("start", "end"))
     _, root = next(context)
     if root.tag != "DomainObjects":
-        raise ValueError("Invalid cobas file: root element is not 'DomainObjects'")
+        raise ValueError(
+            f"Invalid cobas file {filepath.name}: root element is not 'DomainObjects'"
+        )
 
     for event, el in context:
         if event != "end":
@@ -79,8 +71,15 @@ def parse_cobas_file(filepath: str | Path) -> list[LC480Data]:
                     well = _normalize_well(well_el.get("PositionName", ""))
                     if well is None:
                         continue
+                    if (run_id, well) in file_wells:
+                        raise ValueError(
+                            f"Invalid cobas file {filepath.name}: "
+                            f"well {well} occurs twice in one run"
+                        )
+                    file_wells.add((run_id, well))
+                    # Already read from an earlier, overlapping export
                     if well in raw[run_id]:
-                        raise ValueError(f"Invalid cobas file: well {well} occurs twice in one run")
+                        continue
                     curves: dict[tuple[int, int], list[tuple[int, int, float]]] = defaultdict(list)
                     for program in well_el.findall("Programs/Program"):
                         program_id = int(program.get("Id", "0"))
@@ -99,10 +98,36 @@ def parse_cobas_file(filepath: str | Path) -> list[LC480Data]:
                     sample_names[run_id][well] = sample
             el.clear()
 
+    return root.get("SoftwareVersion", "")
+
+
+def parse_cobas_files(paths: Iterable[str | Path]) -> list[LC480Data]:
+    """Parse cobas 6800/8800 result export XML files.
+
+    An export can hold test orders from several runs (AD plates) whose well
+    positions overlap, so one LC480Data is returned per run, oldest first.
+    Runs can span several exports, and exports can overlap: a well already
+    read from an earlier file is skipped.
+    """
+    # run_id -> well -> channel key (excitation, emission) -> [(program, seq, value)]
+    raw: dict[str, dict[str, dict[tuple[int, int], list[tuple[int, int, float]]]]] = (
+        defaultdict(dict)
+    )
+    sample_names: dict[str, dict[str, str]] = defaultdict(dict)
+    run_start: dict[str, str] = {}
+    run_tests: dict[str, set[str]] = defaultdict(set)
+    test_names: dict[str, str] = {}
+    software_versions: set[str] = set()
+
+    for filepath in map(Path, paths):
+        version = _read_file(filepath, raw, sample_names, run_start, run_tests, test_names)
+        if version:
+            software_versions.add(version)
+
     if not raw:
         raise ValueError("Invalid cobas file: no PCR raw data found")
 
-    software_version = f"cobas {root.get('SoftwareVersion', '')}".strip()
+    software_version = f"cobas {', '.join(sorted(software_versions))}".strip()
 
     runs: list[LC480Data] = []
     for run_id in sorted(raw, key=lambda r: run_start[r]):

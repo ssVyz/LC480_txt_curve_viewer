@@ -8,7 +8,9 @@ get_experiment_info = types.FunctionDeclaration(
         "Get an overview of the currently loaded experiment: name, plate layout "
         "(96 or 24 wells), list of wells with data, channels, number of cycles, "
         "and sample names. Call this first to understand "
-        "the plate layout before querying individual wells."
+        "the plate layout before querying individual wells. If several plates "
+        "are open, wells are named P<plate>:<well> (e.g. P2:A1) in all functions, "
+        "and 'plates' lists the plates."
     ),
     parameters=types.Schema(
         type=types.Type.OBJECT,

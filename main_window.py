@@ -3,16 +3,18 @@
 from dataclasses import replace
 
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QSplitter,
-    QFileDialog, QMessageBox, QInputDialog,
+    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSplitter,
+    QFileDialog, QMessageBox, QLabel, QComboBox,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
 from lc480_parser import LC480Data, parse_lc480_file
 from lcpro_parser import parse_lcpro_file
-from cobas_parser import parse_cobas_file
+from cobas_parser import parse_cobas_files
 from cobas5800_parser import parse_cobas5800_files
+from plate_set import combine_plates, split_well_key, well_key
+from run_select_dialog import RunSelectDialog
 from plate_map_widget import PlateMapWidget
 from sample_table_widget import SampleTableWidget
 from curve_viewer_widget import CurveViewerWidget
@@ -37,6 +39,11 @@ class MainWindow(QMainWindow):
         self.resize(1200, 800)
 
         self._data: LC480Data | None = None
+        # Open plates (several only for cobas runs); _data combines them, with
+        # wells keyed 'P<n>:<well>' when there are several (see plate_set.py)
+        self._plates: list[LC480Data] = []
+        self._current_plate = 0  # index of the plate shown in the plate map
+        self._selection: set[str] = set()
         self._syncing = False
         self._color_settings = ColorSettings()
         self._baseline_settings = BaselineSettings()
@@ -63,9 +70,28 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(4, 4, 4, 4)
 
         left_splitter = QSplitter(Qt.Orientation.Vertical)
+
+        # Plate picker above the plate map, shown only with several plates open
+        plate_panel = QWidget()
+        plate_layout = QVBoxLayout(plate_panel)
+        plate_layout.setContentsMargins(0, 0, 0, 0)
+        self.plate_picker = QWidget()
+        picker_layout = QHBoxLayout(self.plate_picker)
+        picker_layout.setContentsMargins(0, 0, 0, 0)
+        picker_layout.addWidget(QLabel("Plate:"))
+        self.plate_combo = QComboBox()
+        self.plate_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.plate_combo.setMinimumContentsLength(20)
+        picker_layout.addWidget(self.plate_combo, 1)
+        self.plate_picker.hide()
+        plate_layout.addWidget(self.plate_picker)
         self.plate_map = PlateMapWidget()
+        plate_layout.addWidget(self.plate_map)
+
         self.sample_table = SampleTableWidget()
-        left_splitter.addWidget(self.plate_map)
+        left_splitter.addWidget(plate_panel)
         left_splitter.addWidget(self.sample_table)
         left_splitter.setSizes([300, 500])
 
@@ -89,7 +115,7 @@ class MainWindow(QMainWindow):
         import_act.triggered.connect(self._import_file)
         import_pro_act = file_menu.addAction("Import LC-&Pro File...")
         import_pro_act.triggered.connect(self._import_lcpro_file)
-        import_cobas_act = file_menu.addAction("Import &cobas 6800/8800 File...")
+        import_cobas_act = file_menu.addAction("Import &cobas 6800/8800 Files...")
         import_cobas_act.triggered.connect(self._import_cobas_file)
         import_c5800_act = file_menu.addAction("Import cobas &5800 Results...")
         import_c5800_act.triggered.connect(self._import_cobas5800_files)
@@ -130,6 +156,7 @@ class MainWindow(QMainWindow):
         llm_console_act.triggered.connect(self._open_llm_console)
 
     def _connect_signals(self):
+        self.plate_combo.currentIndexChanged.connect(self._on_plate_switched)
         self.plate_map.selectionChanged.connect(self._on_plate_selection)
         self.plate_map.configureColorRequested.connect(self._on_configure_color)
         self.plate_map.clearColorRequested.connect(self._on_clear_color)
@@ -150,11 +177,11 @@ class MainWindow(QMainWindow):
         if not filepath:
             return
         try:
-            self._data = parse_lc480_file(filepath)
+            data = parse_lc480_file(filepath)
         except Exception as exc:
             QMessageBox.critical(self, "Import Error", str(exc))
             return
-        self._on_data_loaded()
+        self._load_plates([data])
 
     def _import_lcpro_file(self):
         filepath, _ = QFileDialog.getOpenFileName(
@@ -164,25 +191,25 @@ class MainWindow(QMainWindow):
         if not filepath:
             return
         try:
-            self._data = parse_lcpro_file(filepath)
+            data = parse_lcpro_file(filepath)
         except Exception as exc:
             QMessageBox.critical(self, "Import Error", str(exc))
             return
-        self._on_data_loaded()
+        self._load_plates([data])
 
     def _import_cobas_file(self):
-        filepath, _ = QFileDialog.getOpenFileName(
-            self, "Import cobas 6800/8800 File", "",
+        filepaths, _ = QFileDialog.getOpenFileNames(
+            self, "Import cobas 6800/8800 Files", "",
             "XML Files (*.xml);;All Files (*)",
         )
-        if not filepath:
+        if not filepaths:
             return
         try:
-            runs = parse_cobas_file(filepath)
+            runs = parse_cobas_files(filepaths)
         except Exception as exc:
             QMessageBox.critical(self, "Import Error", str(exc))
             return
-        self._load_run(runs)
+        self._load_runs(runs)
 
     def _import_cobas5800_files(self):
         # The export is a zip of one XML per sample; unpacked XMLs work too
@@ -197,44 +224,70 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Import Error", str(exc))
             return
-        self._load_run(runs)
+        self._load_runs(runs)
 
-    def _load_run(self, runs: list[LC480Data]):
-        """Load one of the parsed runs, asking which if there are several."""
-        # Runs share well positions, so only one can be shown at a time
+    def _load_runs(self, runs: list[LC480Data]):
+        """Open the parsed runs as plates, asking which if there are several."""
         if len(runs) > 1:
-            labels = [
-                f"{i}. {d.experiment_name} ({len(d.wells)} samples)"
-                for i, d in enumerate(runs, 1)
-            ]
-            label, ok = QInputDialog.getItem(
-                self, "Select Run",
-                f"Found {len(runs)} runs. Select the run to load:",
-                labels, 0, False,
-            )
-            if not ok:
+            dlg = RunSelectDialog(runs, parent=self)
+            if dlg.exec() != dlg.DialogCode.Accepted:
                 return
-            self._data = runs[labels.index(label)]
-        else:
-            self._data = runs[0]
+            runs = dlg.selected_runs()
+        self._load_plates(runs)
+
+    def _load_plates(self, plates: list[LC480Data]):
+        """Replace the open plates (LC480 and LC Pro files are one plate)."""
+        try:
+            data = combine_plates(plates)
+        except ValueError as exc:
+            QMessageBox.critical(self, "Import Error", str(exc))
+            return
+        self._rekey_wells(len(plates))
+        self._plates = plates
+        self._current_plate = 0
+        self._data = data
         self._on_data_loaded()
+
+    def _rekey_wells(self, plate_count: int):
+        """Carry well colors and inactive wells over to a new set of plates by
+        plate position (plate 1 to plate 1, ...); a single plate uses plain names."""
+        def rekey(key: str) -> str | None:
+            plate_no, well = split_well_key(key)
+            if plate_no > plate_count:
+                return None
+            return well if plate_count == 1 else well_key(plate_no, well)
+
+        colors = self._color_settings.sample_colors
+        rekeyed = {k: c for key, c in colors.items() if (k := rekey(key)) is not None}
+        colors.clear()
+        colors.update(rekeyed)
+        self._inactive_wells = {
+            k for key in self._inactive_wells if (k := rekey(key)) is not None
+        }
 
     def _on_data_loaded(self):
         d = self._data
         self.setWindowTitle(f"LC480 Result Viewer - {d.experiment_name}")
 
+        multi = len(self._plates) > 1
+        self.plate_combo.blockSignals(True)
+        self.plate_combo.clear()
+        if multi:
+            self.plate_combo.addItems([
+                f"{i}. {p.experiment_name} ({len(p.wells)} samples)"
+                for i, p in enumerate(self._plates, 1)
+            ])
+        self.plate_combo.blockSignals(False)
+        self.plate_picker.setVisible(multi)
+
         # Well colors, inactive wells and baseline settings carry over between
         # files; View > Reset Plate View returns them to defaults.
-        self.plate_map.set_data(d.wells, d.sample_names, d.plate_rows, d.plate_cols)
-        self.sample_table.set_data(d)
+        self.sample_table.set_data(
+            d, [p.experiment_name for p in self._plates] if multi else None
+        )
         self.curve_viewer.set_data(d)
-
-        all_wells = set(d.wells)
-        self._syncing = True
-        self.plate_map.set_selection(all_wells)
-        self.sample_table.set_selection(all_wells)
-        self.curve_viewer.set_selected_wells(all_wells)
-        self._syncing = False
+        self._set_selection(set(d.wells))
+        self._show_plate()
 
         self._push_colors()
         self._push_inactive()
@@ -259,8 +312,9 @@ class MainWindow(QMainWindow):
 
         # Read current table contents (mirrors what the user sees)
         table = self.sample_table.table
+        columns = [c for c in range(table.columnCount()) if not table.isColumnHidden(c)]
         headers = []
-        for col in range(table.columnCount()):
+        for col in columns:
             headers.append(table.horizontalHeaderItem(col).text())
 
         # Baseline end actually used (adaptive end may shorten it per well),
@@ -275,10 +329,10 @@ class MainWindow(QMainWindow):
         rows = []
         for row in range(table.rowCount()):
             row_data = []
-            for col in range(table.columnCount()):
+            for col in columns:
                 item = table.item(row, col)
                 row_data.append(item.text() if item else "")
-            end = ends.get(row_data[0])
+            end = ends.get(self.sample_table.row_key(row))
             row_data.append(str(end) if end is not None else "")
             rows.append(row_data)
 
@@ -295,29 +349,92 @@ class MainWindow(QMainWindow):
 
     # -- Selection sync ------------------------------------------------------
 
+    def _set_selection(self, wells: set[str]):
+        """Select wells (keys, on all plates) in every widget."""
+        self._selection = set(wells)
+        self._syncing = True
+        self.plate_map.set_selection(self._on_plate(wells))
+        self.sample_table.set_selection(wells)
+        self.curve_viewer.set_selected_wells(wells)
+        self._syncing = False
+
     def _on_plate_selection(self, wells: set[str]):
         if self._syncing:
             return
+        # The plate map shows one plate; the other plates keep their selection
+        self._selection = (
+            {k for k in self._selection if not self._is_on_plate(k)}
+            | self._plate_keys(wells)
+        )
         self._syncing = True
-        self.sample_table.set_selection(wells)
-        self.curve_viewer.set_selected_wells(wells)
+        self.sample_table.set_selection(self._selection)
+        self.curve_viewer.set_selected_wells(self._selection)
         self._syncing = False
         self._update_status()
 
     def _on_table_selection(self, wells: set[str]):
         if self._syncing:
             return
+        self._selection = set(wells)
         self._syncing = True
-        self.plate_map.set_selection(wells)
+        self.plate_map.set_selection(self._on_plate(wells))
         self.curve_viewer.set_selected_wells(wells)
         self._syncing = False
         self._update_status()
+
+    # -- Plates --------------------------------------------------------------
+    # The plate map shows one plate and works with plain well names ('A1');
+    # with several plates open, everything else uses keys like 'P2:A1'.
+
+    def _on_plate_switched(self, index: int):
+        if index < 0:
+            return
+        self._current_plate = index
+        self._show_plate()
+        self._update_status()
+
+    def _show_plate(self):
+        """Show the displayed plate with its selection, colors and inactive wells."""
+        p = self._plates[self._current_plate]
+        self.plate_map.set_data(p.wells, p.sample_names, p.plate_rows, p.plate_cols)
+        self.plate_map.set_selection(self._on_plate(self._selection))
+        self.plate_map.set_sample_colors(self._plate_colors())
+        self.plate_map.set_inactive_wells(self._on_plate(self._inactive_wells))
+
+    def _is_on_plate(self, key: str) -> bool:
+        """Whether a well key belongs to the displayed plate."""
+        return (len(self._plates) <= 1
+                or split_well_key(key)[0] == self._current_plate + 1)
+
+    def _plate_well(self, key: str) -> str:
+        return key if len(self._plates) <= 1 else split_well_key(key)[1]
+
+    def _plate_key(self, well: str) -> str:
+        if len(self._plates) <= 1:
+            return well
+        return well_key(self._current_plate + 1, well)
+
+    def _on_plate(self, keys) -> set[str]:
+        """Well names of the keys that are on the displayed plate."""
+        return {self._plate_well(k) for k in keys if self._is_on_plate(k)}
+
+    def _plate_keys(self, wells) -> set[str]:
+        """Keys of wells on the displayed plate."""
+        return {self._plate_key(w) for w in wells}
+
+    def _plate_colors(self) -> dict[str, QColor]:
+        """Custom colors of the displayed plate's wells, by well name."""
+        return {
+            self._plate_well(k): c
+            for k, c in self._color_settings.sample_colors.items()
+            if self._is_on_plate(k)
+        }
 
     # -- Colour management ---------------------------------------------------
 
     def _push_colors(self):
         """Push current colour settings to all widgets that need them."""
-        self.plate_map.set_sample_colors(self._color_settings.sample_colors)
+        self.plate_map.set_sample_colors(self._plate_colors())
         self.curve_viewer.set_color_settings(self._color_settings)
 
     def _open_color_settings(self):
@@ -327,6 +444,7 @@ class MainWindow(QMainWindow):
             self._push_colors()
 
     def _on_configure_color(self, wells: set[str]):
+        wells = self._plate_keys(wells)
         # Use existing colour of first well as initial, if any
         first = next(iter(wells))
         initial = self._color_settings.sample_colors.get(first)
@@ -339,7 +457,7 @@ class MainWindow(QMainWindow):
 
     def _on_clear_color(self, wells: set[str]):
         changed = False
-        for w in wells:
+        for w in self._plate_keys(wells):
             if w in self._color_settings.sample_colors:
                 del self._color_settings.sample_colors[w]
                 changed = True
@@ -350,16 +468,18 @@ class MainWindow(QMainWindow):
 
     def _push_inactive(self):
         """Push inactive well state to all widgets."""
-        self.plate_map.set_inactive_wells(self._inactive_wells)
+        self.plate_map.set_inactive_wells(self._on_plate(self._inactive_wells))
         self.curve_viewer.set_inactive_wells(self._inactive_wells)
         self.sample_table.set_inactive_wells(self._inactive_wells)
 
+    # Plate map context menu actions (wells of the displayed plate)
+
     def _on_inactivate_wells(self, wells: set[str]):
-        self._inactive_wells |= wells
+        self._inactive_wells |= self._plate_keys(wells)
         self._push_inactive()
 
     def _on_reactivate_wells(self, wells: set[str]):
-        self._inactive_wells -= wells
+        self._inactive_wells -= self._plate_keys(wells)
         self._push_inactive()
 
     # -- Plate setup save / load ---------------------------------------------
@@ -377,13 +497,15 @@ class MainWindow(QMainWindow):
         if not filepath.lower().endswith(".plate"):
             filepath += ".plate"
 
+        # With several plates open, only the displayed one is saved
+        plate = self._plates[self._current_plate]
         setup = PlateSetup(
-            well_colors=dict(self._color_settings.sample_colors),
-            inactive_wells=set(self._inactive_wells),
+            well_colors=self._plate_colors(),
+            inactive_wells=self._on_plate(self._inactive_wells),
             baseline=replace(self._baseline_settings),
         )
         try:
-            save_plate_setup(filepath, setup, self._data.experiment_name)
+            save_plate_setup(filepath, setup, plate.experiment_name)
         except OSError as exc:
             QMessageBox.critical(self, "Save Error", str(exc))
             return
@@ -408,18 +530,30 @@ class MainWindow(QMainWindow):
             return
 
         # Replace (not merge) so the saved configuration is reproduced exactly;
-        # files without baseline settings fall back to the defaults
+        # files without baseline settings fall back to the defaults. With
+        # several plates open, it replaces the displayed plate's wells only.
         baseline = setup.baseline or BaselineSettings()
         clamped = baseline.clamp_to_cycles(self._data.num_cycles)
-        self._apply_plate_state(setup.well_colors, setup.inactive_wells, baseline)
+        colors = {
+            k: c for k, c in self._color_settings.sample_colors.items()
+            if not self._is_on_plate(k)
+        }
+        colors.update({self._plate_key(w): c for w, c in setup.well_colors.items()})
+        inactive = (
+            {k for k in self._inactive_wells if not self._is_on_plate(k)}
+            | self._plate_keys(setup.inactive_wells)
+        )
+        self._apply_plate_state(colors, inactive, baseline)
 
+        plate = self._plates[self._current_plate]
+        target = f" to plate {self._current_plate + 1}" if len(self._plates) > 1 else ""
         msg = (
-            f"Loaded plate setup from {filepath}: "
+            f"Loaded plate setup from {filepath}{target}: "
             f"{len(setup.well_colors)} colored, "
             f"{len(setup.inactive_wells)} inactive wells"
         )
         unmatched = (
-            (setup.well_colors.keys() | setup.inactive_wells) - set(self._data.wells)
+            (setup.well_colors.keys() | setup.inactive_wells) - set(plate.wells)
         )
         if unmatched:
             msg += f" ({len(unmatched)} not in current data)"
@@ -430,9 +564,10 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(msg)
 
     def _reset_plate_view(self):
+        all_plates = " on all plates" if len(self._plates) > 1 else ""
         answer = QMessageBox.question(
             self, "Reset Plate View",
-            "Reset well colors, inactive wells and baseline settings to defaults?",
+            f"Reset well colors, inactive wells{all_plates} and baseline settings to defaults?",
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
@@ -520,18 +655,23 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Heatmap", "No channel selected.")
             return
 
+        # The heatmap shows the displayed plate
+        plate = self._plates[self._current_plate]
         first_channel = checked[0]
         ct_data: dict[str, float | None] = {}
         call_data: dict[str, str] = {}
-        for well in self._data.wells:
-            ct_data[well] = self._baseline_results.ct.get(well, {}).get(first_channel)
-            call_data[well] = self._baseline_results.call.get(well, {}).get(first_channel, "N/A")
+        for well in plate.wells:
+            key = self._plate_key(well)
+            ct_data[well] = self._baseline_results.ct.get(key, {}).get(first_channel)
+            call_data[well] = self._baseline_results.call.get(key, {}).get(first_channel, "N/A")
 
         dlg = HeatmapDialog(
-            self._data.wells, self._data.sample_names,
+            plate.wells, plate.sample_names,
             call_data, ct_data, channel=first_channel,
-            inactive_wells=self._inactive_wells,
-            plate_size=(self._data.plate_rows, self._data.plate_cols), parent=self,
+            inactive_wells=self._on_plate(self._inactive_wells),
+            plate_size=(plate.plate_rows, plate.plate_cols),
+            plate_name=plate.experiment_name if len(self._plates) > 1 else "",
+            parent=self,
         )
         dlg.exec()
 
@@ -582,11 +722,16 @@ class MainWindow(QMainWindow):
     def _update_status(self):
         if not self._data:
             return
+        plate = self._plates[self._current_plate]
+        name = plate.experiment_name
         sel = len(self.plate_map.get_selection())
-        total = len(self._data.wells)
+        selected = f"{sel}/{len(plate.wells)} wells selected"
+        if len(self._plates) > 1:
+            name = f"Plate {self._current_plate + 1}/{len(self._plates)}: {name}"
+            selected += f" ({len(self._selection)}/{len(self._data.wells)} on all plates)"
         self.statusBar().showMessage(
-            f"{self._data.experiment_name}  |  "
-            f"{sel}/{total} wells selected  |  "
+            f"{name}  |  "
+            f"{selected}  |  "
             f"{self._data.num_cycles} cycles  |  "
             f"{len(self._data.channels)} channels"
         )

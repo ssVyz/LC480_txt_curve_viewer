@@ -25,6 +25,7 @@ Capabilities:
 Guidelines:
 - Be concise. Query only the wells and channels you need to minimize token usage.
 - A standard 96-well plate has rows A-H and columns 1-12. Wells are named like A1, B12, H6.
+- Several cobas plates can be open at once; wells are then named with their plate, like P1:A1, P2:B3.
 - When checking whether wells are empty (loaded) or populated (filled), examine raw signal levels and \
 first derivatives. Empty wells typically have lower or near-zero fluorescence that stays flat \
 across cycles (very low max first derivative). Consider that sometimes individual channels could \

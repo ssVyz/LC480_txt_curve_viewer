@@ -8,7 +8,13 @@ import numpy as np
 from PySide6.QtGui import QColor
 
 if TYPE_CHECKING:
+    from lc480_parser import LC480Data
     from main_window import MainWindow
+
+
+def _plate_layout(d: LC480Data) -> str:
+    last_well = f"{chr(ord('A') + d.plate_rows - 1)}{d.plate_cols}"
+    return f"{d.plate_rows * d.plate_cols} wells, A1-{last_well}"
 
 
 class MainWindowBridge:
@@ -25,10 +31,10 @@ class MainWindowBridge:
 
     def get_experiment_info(self) -> dict:
         d = self._mw._data
-        last_well = f"{chr(ord('A') + d.plate_rows - 1)}{d.plate_cols}"
-        return {
+        plates = self._mw._plates
+        info = {
             "experiment_name": d.experiment_name,
-            "plate_layout": f"{d.plate_rows * d.plate_cols} wells, A1-{last_well}",
+            "plate_layout": _plate_layout(d),
             "num_wells": len(d.wells),
             "wells": d.wells,
             "channels": d.channels,
@@ -36,6 +42,21 @@ class MainWindowBridge:
             "sample_names": {w: n for w, n in d.sample_names.items() if n},
             "inactive_wells": sorted(self._mw._inactive_wells & set(d.wells)),
         }
+        if len(plates) > 1:
+            info["plate_layout"] = (
+                f"{len(plates)} plates; wells are named P<plate>:<well>, e.g. P2:A1"
+            )
+            info["plates"] = [
+                {
+                    "plate": f"P{i}",
+                    "experiment_name": p.experiment_name,
+                    "plate_layout": _plate_layout(p),
+                    "num_wells": len(p.wells),
+                }
+                for i, p in enumerate(plates, 1)
+            ]
+            info["displayed_plate"] = f"P{self._mw._current_plate + 1}"
+        return info
 
     def get_well_data(self, wells: list[str], channels: list[str] | None) -> dict:
         d = self._mw._data
@@ -141,11 +162,7 @@ class MainWindowBridge:
 
     def select_wells(self, wells: list[str]) -> dict:
         well_set = set(wells) & set(self._mw._data.wells)
-        self._mw._syncing = True
-        self._mw.plate_map.set_selection(well_set)
-        self._mw.sample_table.set_selection(well_set)
-        self._mw.curve_viewer.set_selected_wells(well_set)
-        self._mw._syncing = False
+        self._mw._set_selection(well_set)
         self._mw._update_status()
         return {"selected": sorted(well_set)}
 

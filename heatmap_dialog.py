@@ -269,11 +269,14 @@ class HeatmapDialog(QDialog):
     def __init__(self, wells: list[str], sample_names: dict[str, str],
                  call_data: dict[str, str], ct_data: dict[str, float | None],
                  channel: str = "", inactive_wells: set[str] | None = None,
-                 plate_size: tuple[int, int] | None = None, parent=None):
+                 plate_size: tuple[int, int] | None = None, plate_name: str = "",
+                 parent=None):
         super().__init__(parent)
         title = "Heatmap"
         if channel:
             title += f" - {channel}"
+        if plate_name:
+            title += f" - {plate_name}"
         self.setWindowTitle(title)
         self.resize(600, 520)
 

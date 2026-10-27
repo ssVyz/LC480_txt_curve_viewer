@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-10-27
+
+### Added
+- Several cobas 6800/8800 or cobas 5800 runs can be open as plates at the same time.
+  - When the selected files contain several runs, a checklist (all checked) chooses the runs to open. Each import replaces the open plates.
+  - File > Import cobas 6800/8800 Files accepts several export files; runs are combined across files, and wells already read from an earlier, overlapping export are skipped.
+  - A Plate drop-down above the plate map picks the plate shown there. Each plate keeps its own selection, well colors and inactive wells; switching plates keeps all of them.
+  - The curve viewer shows the selected wells of all plates together. The sample table lists all plates with an extra Plate column, and the CSV export includes it.
+  - Plate map actions (click, drag, row/column labels, Select All/Deselect All/Invert, colors, inactivate) apply to the plate shown.
+  - Baseline and color compensation settings apply to all plates. Plates must have the same number of cycles.
+  - View > Save/Load Plate save and load the plate shown (file format unchanged); Reset Plate View resets all plates. The heatmap shows the plate shown.
+  - Well colors and inactive wells carry over to newly imported plates by plate position (plate 1 to plate 1, ...), as they did for a single plate.
+  - The LLM console sees all plates, with wells named like `P2:A1`; `get_experiment_info` lists the plates and the plate shown.
+
+### Changed
+- LC480 and LC Pro files still open as a single plate; the drop-down and the Plate column only appear with several plates open.
+
 ## [0.2.5] - 2026-10-21
 
 ### Added

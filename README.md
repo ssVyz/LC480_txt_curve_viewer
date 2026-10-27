@@ -5,6 +5,7 @@ Desktop viewer for qPCR amplification curves from Roche LightCycler 480, LightCy
 ## Features
 
 - Import LC480 text exports, LC Pro XML exports, cobas 6800/8800 XML exports and cobas 5800 exports (zip of per-sample XMLs, 24-well plate)
+- Open several cobas runs as plates side by side: pick the plate map's plate from a drop-down, view curves of all plates together
 - Amplification curves with 1st/2nd derivative views, smoothing and log scale
 - Plate map with well selection, activation/inactivation and custom colors
 - Baseline correction (fixed or adaptive end), Ct and call calculation
@@ -35,6 +36,8 @@ To use the LLM console, enter a Google API key under **LLM > Settings** (stored 
 | `lcpro_parser.py` | LC Pro XML parser |
 | `cobas_parser.py` | cobas 6800/8800 XML parser (one `LC480Data` per run) |
 | `cobas5800_parser.py` | cobas 5800 parser for zipped or loose per-sample XMLs (one `LC480Data` per run) |
+| `plate_set.py` | Combines several open plates into one `LC480Data` (well keys like `P2:A1`) |
+| `run_select_dialog.py` | Dialog to pick the runs to open as plates |
 | `baseline.py` | Baseline correction, Ct/call calculation, baseline dialog |
 | `color_compensation.py` | Cross-talk correction and its dialog |
 | `color_settings.py` | Well/channel color settings |
