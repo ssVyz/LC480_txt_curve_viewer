@@ -20,6 +20,23 @@ def split_well_key(key: str) -> tuple[int, str]:
     return 1, key
 
 
+def check_plates_match(plates: list[LC480Data], names: list[str]) -> None:
+    """Raise ValueError, listing each plate by name, if the plates differ in
+    cycle count or channels (LC480 / LC Pro files must match to open together)."""
+    if len({p.num_cycles for p in plates}) > 1:
+        details = [f"{n}: {p.num_cycles} cycles" for n, p in zip(names, plates)]
+        raise ValueError(
+            "Plates with different numbers of cycles cannot be opened together.\n\n"
+            + "\n".join(details)
+        )
+    if len({frozenset(p.channels) for p in plates}) > 1:
+        details = [f"{n}: {', '.join(p.channels)}" for n, p in zip(names, plates)]
+        raise ValueError(
+            "Plates with different channels cannot be opened together.\n\n"
+            + "\n".join(details)
+        )
+
+
 def combine_plates(plates: list[LC480Data]) -> LC480Data:
     """Merge plates into one run for the curve viewer, sample table and baseline.
 

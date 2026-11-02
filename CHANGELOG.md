@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-11-02
+
+### Added
+- File > Import LC480 Files and Import LC-Pro Files accept several files, which open as plates side by side, the same way as several cobas runs (Plate drop-down, combined curves, Plate column, per-plate selection, colors and inactive wells).
+  - Plates are numbered in file name order. Each import replaces the open plates; to change which plates are open, import the wanted files again. LC480 and LC Pro files cannot be opened together.
+  - All files must have the same number of cycles and the same channels; otherwise the import stops with a message listing each file, and the open plates stay as they are. If a file cannot be read, the message names it.
+  - A plate without an experiment name, or whose experiment name another selected file shares, is labelled with its file name.
+
+### Changed
+- Importing a single LC480 or LC Pro file works as before.
+
 ## [0.2.6] - 2026-10-27
 
 ### Added

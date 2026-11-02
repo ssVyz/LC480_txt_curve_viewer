@@ -1,6 +1,8 @@
 """Main application window."""
 
+from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSplitter,
@@ -13,7 +15,7 @@ from lc480_parser import LC480Data, parse_lc480_file
 from lcpro_parser import parse_lcpro_file
 from cobas_parser import parse_cobas_files
 from cobas5800_parser import parse_cobas5800_files
-from plate_set import combine_plates, split_well_key, well_key
+from plate_set import check_plates_match, combine_plates, split_well_key, well_key
 from run_select_dialog import RunSelectDialog
 from plate_map_widget import PlateMapWidget
 from sample_table_widget import SampleTableWidget
@@ -39,7 +41,7 @@ class MainWindow(QMainWindow):
         self.resize(1200, 800)
 
         self._data: LC480Data | None = None
-        # Open plates (several only for cobas runs); _data combines them, with
+        # Open plates (cobas runs or LC480 / LC Pro files); _data combines them, with
         # wells keyed 'P<n>:<well>' when there are several (see plate_set.py)
         self._plates: list[LC480Data] = []
         self._current_plate = 0  # index of the plate shown in the plate map
@@ -110,10 +112,10 @@ class MainWindow(QMainWindow):
     def _setup_menu(self):
         # File menu
         file_menu = self.menuBar().addMenu("&File")
-        import_act = file_menu.addAction("&Import LC480 File...")
+        import_act = file_menu.addAction("&Import LC480 Files...")
         import_act.setShortcut("Ctrl+O")
         import_act.triggered.connect(self._import_file)
-        import_pro_act = file_menu.addAction("Import LC-&Pro File...")
+        import_pro_act = file_menu.addAction("Import LC-&Pro Files...")
         import_pro_act.triggered.connect(self._import_lcpro_file)
         import_cobas_act = file_menu.addAction("Import &cobas 6800/8800 Files...")
         import_cobas_act.triggered.connect(self._import_cobas_file)
@@ -170,32 +172,49 @@ class MainWindow(QMainWindow):
     # -- File import ---------------------------------------------------------
 
     def _import_file(self):
-        filepath, _ = QFileDialog.getOpenFileName(
-            self, "Import LC480 File", "",
-            "Text Files (*.txt);;All Files (*)",
+        self._import_plate_files(
+            "Import LC480 Files", "Text Files (*.txt);;All Files (*)",
+            parse_lc480_file,
         )
-        if not filepath:
-            return
-        try:
-            data = parse_lc480_file(filepath)
-        except Exception as exc:
-            QMessageBox.critical(self, "Import Error", str(exc))
-            return
-        self._load_plates([data])
 
     def _import_lcpro_file(self):
-        filepath, _ = QFileDialog.getOpenFileName(
-            self, "Import LC-Pro File", "",
-            "XML Files (*.xml);;All Files (*)",
+        self._import_plate_files(
+            "Import LC-Pro Files", "XML Files (*.xml);;All Files (*)",
+            parse_lcpro_file,
         )
-        if not filepath:
+
+    def _import_plate_files(self, title: str, file_filter: str,
+                            parse: Callable[[str], LC480Data]):
+        """Import LC480 or LC Pro files, one plate per file. Several files open
+        side by side as plates 1, 2, ... in file name order."""
+        filepaths, _ = QFileDialog.getOpenFileNames(self, title, "", file_filter)
+        if not filepaths:
             return
-        try:
-            data = parse_lcpro_file(filepath)
-        except Exception as exc:
-            QMessageBox.critical(self, "Import Error", str(exc))
-            return
-        self._load_plates([data])
+        filepaths = sorted(filepaths, key=lambda p: (Path(p).name.casefold(), p))
+        multi = len(filepaths) > 1
+        plates = []
+        for filepath in filepaths:
+            try:
+                plates.append(parse(filepath))
+            except Exception as exc:
+                msg = f"{Path(filepath).name}: {exc}" if multi else str(exc)
+                QMessageBox.critical(self, "Import Error", msg)
+                return
+        if multi:
+            # Name plates by file where the experiment name doesn't tell them apart
+            names = [p.experiment_name for p in plates]
+            for plate, filepath in zip(plates, filepaths):
+                stem = Path(filepath).stem
+                if not plate.experiment_name:
+                    plate.experiment_name = stem
+                elif names.count(plate.experiment_name) > 1:
+                    plate.experiment_name = f"{plate.experiment_name} ({stem})"
+            try:
+                check_plates_match(plates, [Path(p).name for p in filepaths])
+            except ValueError as exc:
+                QMessageBox.critical(self, "Import Error", str(exc))
+                return
+        self._load_plates(plates)
 
     def _import_cobas_file(self):
         filepaths, _ = QFileDialog.getOpenFileNames(
@@ -236,7 +255,7 @@ class MainWindow(QMainWindow):
         self._load_plates(runs)
 
     def _load_plates(self, plates: list[LC480Data]):
-        """Replace the open plates (LC480 and LC Pro files are one plate)."""
+        """Replace the open plates (one per cobas run or LC480 / LC Pro file)."""
         try:
             data = combine_plates(plates)
         except ValueError as exc:

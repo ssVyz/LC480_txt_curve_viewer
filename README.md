@@ -5,7 +5,7 @@ Desktop viewer for qPCR amplification curves from Roche LightCycler 480, LightCy
 ## Features
 
 - Import LC480 text exports, LC Pro XML exports, cobas 6800/8800 XML exports and cobas 5800 exports (zip of per-sample XMLs, 24-well plate)
-- Open several cobas runs as plates side by side: pick the plate map's plate from a drop-down, view curves of all plates together
+- Open several plates side by side (cobas runs, or several LC480 or LC Pro files selected in one import): pick the plate map's plate from a drop-down, view curves of all plates together
 - Amplification curves with 1st/2nd derivative views, smoothing and log scale
 - Plate map with well selection, activation/inactivation and custom colors
 - Baseline correction (fixed or adaptive end), Ct and call calculation
